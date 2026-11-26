@@ -1192,45 +1192,6 @@ pre {
               </div>
             </div>
 
-            <!-- Step 2 trade: verifikasi -->
-            <div class="step-block">
-              <div class="step-label">
-                <div class="step-num">2</div>
-                <h3>Verifikasi di Telegram</h3>
-              </div>
-              <p>Setelah YAML dikirim, kirim pesan ini ke Hermes untuk memastikan koneksi berhasil:</p>
-              <div class="code-block">
-                <div class="code-head">
-                  <span class="code-lang">Telegram → agentfreqtrade</span>
-                  <button class="btn-copy" onclick="copyText('verify-trade', this)">Copy</button>
-                </div>
-                <pre id="verify-trade">tampilkan daftar strategi yang tersedia di freqtrade MCP</pre>
-              </div>
-            </div>
-
-            <!-- Step 3 trade: contoh chat -->
-            <div class="step-block">
-              <div class="step-label">
-                <div class="step-num">3</div>
-                <h3>Contoh perintah via Telegram</h3>
-              </div>
-              <p>Setelah terhubung, kamu bisa chat natural ke <strong>agentfreqtrade</strong>:</p>
-              <div class="code-block">
-                <div class="code-head"><span class="code-lang">Telegram → agentfreqtrade</span></div>
-                <pre>download data BTC/USDT timeframe 1h untuk 180 hari terakhir
-
-buat strategi RSI crossover + MACD confirmation untuk BTC/USDT
-
-backtest strategi RSIStrategy untuk BTC/USDT
-timeframe 1h, periode 1 Januari - 1 Desember 2024
-
-jalankan hyperopt RSIStrategy, 100 epochs,
-optimasi roi, stoploss dan trailing
-
-batalkan job abc12345</pre>
-              </div>
-            </div>
-
             <!-- Tools list trade -->
             <div class="step-block">
               <div class="step-label">
@@ -1299,44 +1260,6 @@ batalkan job abc12345</pre>
       url: https://trade.dennyardi.com/sse
       headers:
         Authorization: "Bearer ft-eval-rj5gp8bpzckw12gy46rj"</pre>
-              </div>
-            </div>
-
-            <!-- Step 2 eval: verifikasi -->
-            <div class="step-block">
-              <div class="step-label">
-                <div class="step-num">2</div>
-                <h3>Verifikasi di Telegram</h3>
-              </div>
-              <p>Setelah YAML dikirim, kirim pesan ini untuk memastikan koneksi berhasil:</p>
-              <div class="code-block">
-                <div class="code-head">
-                  <span class="code-lang">Telegram → agentfreqeval</span>
-                  <button class="btn-copy" onclick="copyText('verify-eval', this)">Copy</button>
-                </div>
-                <pre id="verify-eval">tampilkan daftar strategi yang tersedia di freqtrade MCP</pre>
-              </div>
-            </div>
-
-            <!-- Step 3 eval: contoh chat -->
-            <div class="step-block">
-              <div class="step-label">
-                <div class="step-num">3</div>
-                <h3>Contoh perintah via Telegram</h3>
-              </div>
-              <p>Setelah terhubung, kamu bisa chat natural ke <strong>agentfreqeval</strong>:</p>
-              <div class="code-block">
-                <div class="code-head"><span class="code-lang">Telegram → agentfreqeval</span></div>
-                <pre>tampilkan semua strategi yang tersedia
-
-ambil hasil backtest job abc12345
-
-tampilkan parameter terbaik dari hyperopt job def67890
-
-analisis performa strategi dari job abc12345,
-berikan verdict dan rekomendasi
-
-bandingkan hasil backtest job abc12345 dan def67890</pre>
               </div>
             </div>
 
