@@ -37,13 +37,15 @@
 
 ---
 
-## 🔄 Phase 3 — Koneksi Hermes Agent (In Progress)
+## ✅ Phase 3 — Koneksi Hermes Agent (Selesai)
 
-- [ ] Konfigurasi MCP server entry di Hermes config (`~/.hermes/config.yaml`)
-- [ ] Test MCP handshake: `tool_list_strategies` via Hermes
-- [ ] Buat 2 agent profile di Hermes:
-  - [ ] **Agent Pembuat Strategi** — akses 7 tools write
-  - [ ] **Agent Evaluasi** — akses 5 tools read-only
+- [x] Konfigurasi MCP server entry `freqtrade` di 2 profile Hermes
+- [x] Test koneksi HTTP dari VPS Hermes → trade.dennyardi.com ✅ 200 OK
+- [x] Test `/api/login` dari VPS Hermes → token diterima ✅
+- [x] Buat 2 agent profile di VPS Hermes (`/root/.hermes/profiles/`):
+  - [x] **`agentfreqtrade`** — Agent Pembuat Strategi (7 write tools + system prompt)
+  - [x] **`agentfreqeval`** — Agent Evaluasi (5 read-only tools + system prompt)
+- [x] System prompt bahasa Indonesia per agent dengan workflow detail
 - [ ] Test end-to-end via Telegram:
   - [ ] Download data BTC/USDT
   - [ ] Generate strategi RSI + MACD
