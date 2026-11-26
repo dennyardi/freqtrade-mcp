@@ -2,12 +2,14 @@
 
 import asyncio
 import re
-import textwrap
+import subprocess
 from pathlib import Path
 from config import FREQTRADE_BIN, USER_DATA_DIR, STRATEGIES_DIR
 
-# Hanya nama strategy yang aman: huruf, angka, underscore, mulai huruf
 _SAFE_NAME = re.compile(r'^[A-Za-z][A-Za-z0-9_]{0,63}$')
+
+# Validasi timeframe yang diizinkan
+_VALID_TIMEFRAMES = {"1m", "3m", "5m", "15m", "30m", "1h", "2h", "4h", "6h", "8h", "12h", "1d", "3d", "1w"}
 
 
 def _validate_name(name: str) -> bool:
@@ -16,129 +18,139 @@ def _validate_name(name: str) -> bool:
 
 def _build_template(name: str, description: str, timeframe: str) -> str:
     """
-    Bangun template strategy Freqtrade yang valid.
-    Template ini menggunakan pandas-ta (tersedia di freqtrade) tanpa TA-Lib,
-    sehingga tidak ada KeyError dari BBANDS API yang berbeda-beda.
+    Hasilkan file .py strategy Freqtrade yang syntactically valid.
+    Indikator dipilih berdasarkan kata kunci dalam deskripsi.
+    Menggunakan pandas_ta (bundled dengan freqtrade).
     """
     desc_lower = description.lower()
 
-    # Tentukan indikator berdasarkan kata kunci dalam deskripsi
-    use_bb  = any(w in desc_lower for w in ["bollinger", "bb", "band"])
-    use_rsi = "rsi" in desc_lower or not use_bb  # default pakai RSI jika tidak ada BB
-    use_ema = any(w in desc_lower for w in ["ema", "moving average", "trend", "cross"])
+    use_rsi  = "rsi"  in desc_lower
+    use_ema  = any(w in desc_lower for w in ("ema", "moving average", "trend", "cross", "golden"))
     use_macd = "macd" in desc_lower
+    use_bb   = any(w in desc_lower for w in ("bollinger", " bb ", "band"))
 
-    # Bangun blok populate_indicators
-    indicator_lines = []
-    entry_conditions = []
-    exit_conditions  = []
+    # Default: RSI jika tidak ada kata kunci spesifik
+    if not any([use_rsi, use_ema, use_macd, use_bb]):
+        use_rsi = True
 
+    # --- blok indikator (8 spasi = 2 level indent di dalam method) ---
+    ind = []
     if use_rsi:
-        indicator_lines.append('        dataframe["rsi"] = ta.RSI(dataframe["close"], timeperiod=14)')
-        entry_conditions.append("(dataframe[\"rsi\"] < self.buy_rsi.value)")
-        exit_conditions.append("(dataframe[\"rsi\"] > self.sell_rsi.value)")
-
+        ind.append('        dataframe["rsi"] = ta.rsi(dataframe["close"], length=14)')
     if use_ema:
-        indicator_lines.append('        dataframe["ema_fast"] = ta.EMA(dataframe["close"], timeperiod=12)')
-        indicator_lines.append('        dataframe["ema_slow"] = ta.EMA(dataframe["close"], timeperiod=26)')
-        entry_conditions.append("(dataframe[\"ema_fast\"] > dataframe[\"ema_slow\"])")
-        exit_conditions.append("(dataframe[\"ema_fast\"] < dataframe[\"ema_slow\"])")
-
+        ind.append('        dataframe["ema_fast"] = ta.ema(dataframe["close"], length=12)')
+        ind.append('        dataframe["ema_slow"] = ta.ema(dataframe["close"], length=26)')
     if use_macd:
-        indicator_lines += [
-            '        macd = ta.MACD(dataframe["close"])',
-            '        dataframe["macd"]       = macd["MACD"]',
-            '        dataframe["macdsignal"] = macd["MACDs"]',
-            '        dataframe["macdhist"]   = macd["MACDh"]',
-        ]
-        entry_conditions.append("(dataframe[\"macd\"] > dataframe[\"macdsignal\"])")
-        exit_conditions.append("(dataframe[\"macd\"] < dataframe[\"macdsignal\"])")
-
+        ind.append('        macd = ta.macd(dataframe["close"])')
+        ind.append('        dataframe["macd"]      = macd["MACD_12_26_9"]')
+        ind.append('        dataframe["macdsgn"]   = macd["MACDs_12_26_9"]')
     if use_bb:
-        indicator_lines += [
-            '        bb = ta.BBANDS(dataframe["close"], timeperiod=20)',
-            '        dataframe["bb_upper"] = bb["BBU_20_2.0"]',
-            '        dataframe["bb_mid"]   = bb["BBM_20_2.0"]',
-            '        dataframe["bb_lower"] = bb["BBL_20_2.0"]',
-        ]
-        entry_conditions.append("(dataframe[\"close\"] < dataframe[\"bb_lower\"])")
-        exit_conditions.append("(dataframe[\"close\"] > dataframe[\"bb_upper\"])")
+        ind.append('        bb = ta.bbands(dataframe["close"], length=20)')
+        ind.append('        dataframe["bb_upper"] = bb["BBU_20_2.0"]')
+        ind.append('        dataframe["bb_mid"]   = bb["BBM_20_2.0"]')
+        ind.append('        dataframe["bb_lower"] = bb["BBL_20_2.0"]')
+    ind_block = "\n".join(ind)
 
-    # Volume filter — selalu tambahkan
-    indicator_lines.append('        dataframe["volume_mean"] = dataframe["volume"].rolling(20).mean()')
-    entry_conditions.append("(dataframe[\"volume\"] > 0)")
+    # --- kondisi entry ---
+    entry = []
+    if use_rsi:
+        entry.append('            (dataframe["rsi"] < self.buy_rsi.value)')
+    if use_ema:
+        entry.append('            (dataframe["ema_fast"] > dataframe["ema_slow"])')
+    if use_macd:
+        entry.append('            (dataframe["macd"] > dataframe["macdsgn"])')
+    if use_bb:
+        entry.append('            (dataframe["close"] < dataframe["bb_lower"])')
+    entry.append('            (dataframe["volume"] > 0)')
+    entry_block = " &\n".join(entry)
 
-    # Fallback jika tidak ada kondisi
-    if not entry_conditions:
-        entry_conditions = ["(dataframe[\"close\"] > 0)"]
-    if not exit_conditions:
-        exit_conditions = ["(dataframe[\"close\"] < 0)"]
+    # --- kondisi exit ---
+    ex = []
+    if use_rsi:
+        ex.append('            (dataframe["rsi"] > self.sell_rsi.value)')
+    if use_ema:
+        ex.append('            (dataframe["ema_fast"] < dataframe["ema_slow"])')
+    if use_macd:
+        ex.append('            (dataframe["macd"] < dataframe["macdsgn"])')
+    if use_bb:
+        ex.append('            (dataframe["close"] > dataframe["bb_upper"])')
+    if not ex:
+        ex.append('            (dataframe["close"] < dataframe["close"].shift(1))')
+    exit_block = " |\n".join(ex)
 
-    # Import lines
-    imports = [
-        "import pandas_ta as ta",
+    # Parameter RSI hanya jika dipakai
+    rsi_params = ""
+    if use_rsi:
+        rsi_params = (
+            '\n    buy_rsi  = IntParameter(20, 40, default=30, space="buy")'
+            '\n    sell_rsi = IntParameter(60, 80, default=70, space="sell")'
+        )
+
+    # Tulis template sebagai raw string — tidak ada textwrap.dedent
+    # Sehingga indentasi persis seperti yang ditulis di sini
+    lines = [
+        f"# Strategy: {name}",
+        f"# Description: {description}",
+        "",
         "from pandas import DataFrame",
+        "import pandas_ta as ta",
         "from freqtrade.strategy import IStrategy, IntParameter",
+        "",
+        "",
+        f"class {name}(IStrategy):",
+        f'    """{description}"""',
+        "",
+        f'    timeframe    = "{timeframe}"',
+        "    stoploss     = -0.10",
+        '    minimal_roi  = {"0": 0.05, "60": 0.02, "120": 0.01}',
+        "    trailing_stop = False",
     ]
+
     if use_rsi:
-        imports_extra = []
-    else:
-        imports_extra = []
+        lines += [
+            '    buy_rsi  = IntParameter(20, 40, default=30, space="buy")',
+            '    sell_rsi = IntParameter(60, 80, default=70, space="sell")',
+        ]
 
-    indicators_block = "\n".join(indicator_lines) if indicator_lines else '        pass'
-    entry_block = " &\n                ".join(entry_conditions)
-    exit_block  = " |\n                ".join(exit_conditions)
+    lines += [
+        "",
+        "    def populate_indicators(self, dataframe: DataFrame, metadata: dict) -> DataFrame:",
+    ]
+    for ind_line in ind:
+        lines.append(ind_line)
+    lines += [
+        "        return dataframe",
+        "",
+        "    def populate_entry_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:",
+        "        dataframe.loc[",
+        "            (",
+    ]
+    # Tulis kondisi entry (sudah termasuk volume > 0 dari list entry)
+    all_entry = entry + ['            (dataframe["volume"] > 0)']
+    for i, cond in enumerate(all_entry):
+        sep = " &" if i < len(all_entry) - 1 else ""
+        lines.append(f"            {cond.strip()}{sep}")
+    lines += [
+        "            ),",
+        '            "enter_long",',
+        "        ] = 1",
+        "        return dataframe",
+        "",
+        "    def populate_exit_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:",
+        "        dataframe.loc[",
+        "            (",
+    ]
+    for i, cond in enumerate(ex):
+        sep = " |" if i < len(ex) - 1 else ""
+        lines.append(f"            {cond.strip()}{sep}")
+    lines += [
+        "            ),",
+        '            "exit_long",',
+        "        ] = 1",
+        "        return dataframe",
+    ]
 
-    # Hanya tambahkan parameter RSI jika digunakan
-    param_block = ""
-    if use_rsi:
-        param_block = """
-    buy_rsi  = IntParameter(20, 40, default=30, space="buy")
-    sell_rsi = IntParameter(60, 80, default=70, space="sell")
-"""
-
-    return textwrap.dedent(f'''
-        # Strategy: {name}
-        # Description: {description}
-
-        from pandas import DataFrame
-        import pandas_ta as ta
-        from freqtrade.strategy import IStrategy, IntParameter
-
-
-        class {name}(IStrategy):
-            """
-            {description}
-            """
-
-            timeframe    = "{timeframe}"
-            stoploss     = -0.10
-            minimal_roi  = {{"0": 0.05, "60": 0.02, "120": 0.01}}
-            trailing_stop = False
-            {param_block}
-
-            def populate_indicators(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
-        {indicators_block}
-                return dataframe
-
-            def populate_entry_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
-                dataframe.loc[
-                    (
-                        {entry_block}
-                    ),
-                    "enter_long",
-                ] = 1
-                return dataframe
-
-            def populate_exit_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
-                dataframe.loc[
-                    (
-                        {exit_block}
-                    ),
-                    "exit_long",
-                ] = 1
-                return dataframe
-    ''').strip()
+    return "\n".join(lines) + "\n"
 
 
 async def create_strategy(
@@ -148,27 +160,46 @@ async def create_strategy(
 ) -> dict:
     if not _validate_name(name):
         return {"error": f"Strategy name '{name}' tidak valid. Gunakan huruf, angka, underscore (mulai huruf)."}
+    if timeframe not in _VALID_TIMEFRAMES:
+        return {"error": f"Timeframe tidak valid: {timeframe}"}
 
     file_path = Path(STRATEGIES_DIR) / f"{name}.py"
     if file_path.exists():
-        return {"error": f"Strategy '{name}' already exists at {file_path}"}
+        return {"error": f"Strategy '{name}' already exists. Gunakan nama lain atau hapus dulu."}
 
-    template = _build_template(name, description, timeframe)
+    code = _build_template(name, description, timeframe)
     file_path.parent.mkdir(parents=True, exist_ok=True)
-    file_path.write_text(template)
+    file_path.write_text(code)
+
+    # Verifikasi syntax Python sebelum return sukses
+    # Pakai python3 dari venv freqtrade (punya semua dependency)
+    python_bin = Path(FREQTRADE_BIN).parent / "python3"
+    syntax_proc = await asyncio.create_subprocess_exec(
+        str(python_bin), "-m", "py_compile", str(file_path),
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    _, syn_err = await syntax_proc.communicate()
+
+    if syntax_proc.returncode != 0:
+        file_path.unlink(missing_ok=True)
+        return {
+            "success": False,
+            "error": f"Syntax error dalam template yang digenerate: {syn_err.decode()[:500]}",
+        }
 
     return {
         "success": True,
         "strategy_name": name,
         "file_path": str(file_path),
-        "message": f"Strategy '{name}' created. Run tool_validate_strategy to check before backtesting.",
+        "message": f"Strategy '{name}' created. Jalankan tool_validate_strategy sebelum backtest.",
     }
 
 
 async def validate_strategy(strategy_name: str) -> dict:
     """
-    Validasi strategy dengan 'freqtrade list-strategies' dan cek nama strategy ada.
-    'check-freqtrade-files' tidak valid — gunakan list-strategies --no-color.
+    Validasi strategy dengan 'freqtrade list-strategies'.
+    Valid = nama muncul di baris tabel dengan status 'OK' (bukan 'FAILED').
     """
     if not _validate_name(strategy_name):
         return {"error": f"Strategy name '{strategy_name}' tidak valid."}
@@ -183,20 +214,21 @@ async def validate_strategy(strategy_name: str) -> dict:
     stdout, stderr = await proc.communicate()
     output = stdout.decode() + stderr.decode()
 
-    # Strategy valid jika namanya muncul di output list-strategies
-    found = strategy_name in output
+    # Parse tabel output — cari baris yang mengandung nama strategy
+    # Format: | StrategyName       | 1234abc | OK     |
+    #      atau: | StrategyName  | FAILED   |
+    valid = False
+    for line in output.splitlines():
+        if strategy_name in line:
+            # Baris valid hanya jika ada "OK" dan tidak ada "FAILED" / "No load"
+            if "FAILED" in line or "No load" in line or "not load" in line.lower():
+                valid = False
+            elif "| OK" in line or "OK |" in line or "|OK|" in line or " OK " in line:
+                valid = True
+            break
 
     return {
         "strategy_name": strategy_name,
-        "valid": found and proc.returncode == 0,
+        "valid": valid and proc.returncode == 0,
         "output": output[-2000:],
     }
-
-
-async def fix_sample_strategy() -> dict:
-    """Hapus sample_strategy.py yang rusak agar tidak mengganggu."""
-    sample_path = Path(STRATEGIES_DIR) / "sample_strategy.py"
-    if sample_path.exists():
-        sample_path.unlink()
-        return {"removed": str(sample_path)}
-    return {"message": "sample_strategy.py tidak ditemukan"}

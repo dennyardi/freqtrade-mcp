@@ -87,6 +87,31 @@ def _remove_broken_sample_strategy() -> None:
 _remove_broken_sample_strategy()
 
 # ---------------------------------------------------------------------------
+# Pastikan BaselineEma tersedia dan hapus strategi lama yang rusak
+# ---------------------------------------------------------------------------
+def _ensure_baseline_strategy() -> None:
+    from config import STRATEGIES_DIR
+    src  = BASE_DIR / "BaselineEma.py"
+    dest = Path(STRATEGIES_DIR) / "BaselineEma.py"
+    if src.exists() and not dest.exists():
+        try:
+            import shutil
+            shutil.copy2(str(src), str(dest))
+            logger.info("Copied BaselineEma.py to strategies dir")
+        except Exception as e:
+            logger.warning("Could not copy BaselineEma.py: %s", e)
+    for broken in ("conn_test_emacross.py", "mgr_smoke_ema.py"):
+        p = Path(STRATEGIES_DIR) / broken
+        if p.exists():
+            try:
+                p.unlink()
+                logger.info("Removed outdated strategy: %s", broken)
+            except Exception:
+                pass
+
+_ensure_baseline_strategy()
+
+# ---------------------------------------------------------------------------
 # Dashboard HTML cache (baca sekali saat startup)
 # ---------------------------------------------------------------------------
 _DASHBOARD_HTML = (BASE_DIR / "dashboard.html").read_text()
