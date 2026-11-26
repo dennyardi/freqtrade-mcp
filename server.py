@@ -72,6 +72,21 @@ def _patch_freqtrade_config() -> None:
 _patch_freqtrade_config()
 
 # ---------------------------------------------------------------------------
+# Cleanup: hapus sample_strategy.py yang rusak ("class does not exist")
+# ---------------------------------------------------------------------------
+def _remove_broken_sample_strategy() -> None:
+    from config import STRATEGIES_DIR
+    sample = Path(STRATEGIES_DIR) / "sample_strategy.py"
+    if sample.exists():
+        try:
+            sample.unlink()
+            logger.info("Removed broken sample_strategy.py")
+        except Exception as e:
+            logger.warning("Could not remove sample_strategy.py: %s", e)
+
+_remove_broken_sample_strategy()
+
+# ---------------------------------------------------------------------------
 # Dashboard HTML cache (baca sekali saat startup)
 # ---------------------------------------------------------------------------
 _DASHBOARD_HTML = (BASE_DIR / "dashboard.html").read_text()
