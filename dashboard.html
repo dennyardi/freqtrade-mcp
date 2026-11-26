@@ -1245,12 +1245,12 @@ pre {
           <div class="endpoint-strip">
             <div class="endpoint-kv">
               <span class="endpoint-label">Endpoint</span>
-              <span class="endpoint-val">https://trade.dennyardi.com/sse</span>
+              <span class="endpoint-val">https://trade.dennyardi.com/mcp</span>
             </div>
             <div class="endpoint-sep"></div>
             <div class="endpoint-kv">
               <span class="endpoint-label">Protocol</span>
-              <span class="endpoint-val">MCP v2.x / SSE</span>
+              <span class="endpoint-val">MCP v2.x / Streamable HTTP</span>
             </div>
             <div class="endpoint-sep"></div>
             <div class="endpoint-kv">
@@ -1321,8 +1321,8 @@ pre {
                     <pre id="yaml-trade">mcp:
   servers:
     freqtrade:
-      type: sse
-      url: https://trade.dennyardi.com/sse
+      type: http
+      url: https://trade.dennyardi.com/mcp
       headers:
         Authorization: "Bearer ft-mcp-onam14mibilt1b99wkpr"</pre>
                   </div>
@@ -1412,8 +1412,8 @@ pre {
                     <pre id="yaml-eval">mcp:
   servers:
     freqtrade:
-      type: sse
-      url: https://trade.dennyardi.com/sse
+      type: http
+      url: https://trade.dennyardi.com/mcp
       headers:
         Authorization: "Bearer ft-eval-rj5gp8bpzckw12gy46rj"</pre>
                   </div>
@@ -1684,7 +1684,7 @@ function pathToPage(path) {
 
 /* ── API ────────────────────────────────────────────────────────────── */
 async function api(tool, args = {}) {
-  const r = await fetch('/messages/', {
+  const r = await fetch('/mcp', {
     method: 'POST',
     headers: {
       'Authorization': 'Bearer ' + SESSION.token,

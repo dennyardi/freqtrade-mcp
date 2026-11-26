@@ -157,8 +157,8 @@ class BearerAuthMiddleware:
             await self._reject(send, 401, "Unauthorized")
             return
 
-        # SSE: hanya cek token, jangan sentuh body/stream sama sekali
-        if path == "/sse":
+        # SSE & streamable-HTTP: hanya cek token, jangan sentuh body/stream
+        if path == "/sse" or path.startswith("/mcp"):
             await self.app(scope, receive, send)
             return
 
@@ -228,6 +228,11 @@ async def api_login(request: Request):
     return JSONResponse({"detail": "Username atau password salah"}, status_code=401)
 
 sse_app = mcp.sse_app(host="*")
+http_app = mcp.streamable_http_app(
+    streamable_http_path="/mcp",
+    stateless_http=True,
+    host="*",
+)
 
 _app = Starlette(
     routes=[
@@ -239,7 +244,8 @@ _app = Starlette(
         Route("/results",   dashboard),
         Route("/connect",   dashboard),
         Route("/api/login", api_login, methods=["POST"]),
-        Mount("/",          app=sse_app),
+        Mount("/mcp",       app=http_app),   # Streamable HTTP (stateless) — untuk Hermes & dashboard
+        Mount("/",          app=sse_app),    # SSE legacy — backward compat
     ],
 )
 
