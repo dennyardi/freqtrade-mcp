@@ -160,7 +160,18 @@ def _find_latest_result_file(strategy_name: str, suffix: str) -> Path | None:
 def _parse_result_file(result_path: Path, strategy_name: str) -> dict:
     """
     Parse file hasil backtest — support format .zip (Freqtrade 2024+) dan .json (lama).
-    Return dict summary per strategy.
+    Field names dari dokumentasi resmi Freqtrade:
+      profit_total        → total profit sebagai desimal (0.0572 = 5.72%)
+      profit_total_abs    → absolute profit dalam stake currency
+      profit_factor       → profit factor
+      max_drawdown        → max drawdown sebagai desimal
+      max_drawdown_abs    → max drawdown dalam stake currency
+      sharpe              → Sharpe ratio
+      sortino             → Sortino ratio
+      calmar              → Calmar ratio
+      holding_avg         → avg duration string
+      wins, draws, losses → int
+      total_trades        → int
     """
     if not result_path or not result_path.exists():
         return {}
@@ -170,26 +181,18 @@ def _parse_result_file(result_path: Path, strategy_name: str) -> dict:
     if result_path.suffix == ".zip":
         try:
             with zipfile.ZipFile(result_path) as zf:
-                # File utama biasanya punya nama yang sama dengan zip tapi .json
-                # atau nama pertama yang bukan trades/metadata
                 for name in zf.namelist():
                     if (name.endswith(".json")
                             and "trade" not in name.lower()
                             and "metadata" not in name.lower()):
-                        data = json.loads(zf.read(name))
-                        break
-                # Fallback: baca semua sampai dapat key 'strategy'
-                if data is None or "strategy" not in data:
-                    for name in zf.namelist():
-                        if name.endswith(".json"):
-                            try:
-                                candidate = json.loads(zf.read(name))
-                                if "strategy" in candidate:
-                                    data = candidate
-                                    break
-                            except Exception:
-                                pass
-        except Exception as e:
+                        try:
+                            candidate = json.loads(zf.read(name))
+                            if "strategy" in candidate:
+                                data = candidate
+                                break
+                        except Exception:
+                            pass
+        except Exception:
             return {}
     else:
         try:
@@ -203,16 +206,40 @@ def _parse_result_file(result_path: Path, strategy_name: str) -> dict:
     summary = {}
     for strat, m in data["strategy"].items():
         total = max(m.get("total_trades", 0) or 0, 1)
+        wins  = m.get("wins", 0) or 0
+
+        # profit_total_pct sudah dalam persen di zip (Freqtrade hitung sendiri via round(x*100, 2))
+        # Jika field ini tidak ada, fallback ke profit_total (desimal) × 100
+        if "profit_total_pct" in m:
+            profit_pct = m["profit_total_pct"]
+        elif "profit_total" in m and m["profit_total"] is not None:
+            profit_pct = round(m["profit_total"] * 100, 4)
+        else:
+            profit_pct = None
+
+        # max_drawdown_account adalah fraksi akun (0.0202 = 2.02%) → ×100 untuk persen
+        # Field ini berbeda dengan max_drawdown (per-trade drawdown)
+        dd_account = m.get("max_drawdown_account")
+        drawdown_pct = round(dd_account * 100, 4) if dd_account is not None else None
+
         summary[strat] = {
-            "total_trades":     m.get("total_trades", 0),
-            "win_rate":         round((m.get("wins", 0) or 0) / total * 100, 2),
-            "profit_total_pct": m.get("profit_total_pct"),
-            "profit_factor":    m.get("profit_factor"),
-            "max_drawdown_pct": m.get("max_drawdown_account"),
-            "sharpe":           m.get("sharpe"),
-            "calmar":           m.get("calmar"),
-            "sortino":          m.get("sortino"),
-            "avg_duration":     m.get("holding_avg"),
+            "total_trades":      m.get("total_trades", 0),
+            "wins":              wins,
+            "draws":             m.get("draws", 0),
+            "losses":            m.get("losses", 0),
+            "win_rate":          round(wins / total * 100, 2),
+            "profit_total_pct":  profit_pct,          # sudah dalam %
+            "profit_total_abs":  m.get("profit_total_abs"),   # USDT absolute
+            "profit_factor":     m.get("profit_factor"),
+            "max_drawdown_pct":  drawdown_pct,         # % dari akun (account-level)
+            "max_drawdown_abs":  m.get("max_drawdown_abs"),
+            "sharpe":            m.get("sharpe"),
+            "sortino":           m.get("sortino"),
+            "calmar":            m.get("calmar"),
+            "avg_duration":      m.get("holding_avg"),
+            "cagr":              m.get("cagr"),
+            "expectancy":        m.get("expectancy"),
+            "sqn":               m.get("sqn"),
         }
 
     return summary
