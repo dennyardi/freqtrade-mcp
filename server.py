@@ -122,7 +122,7 @@ async def tool_compare_strategies(job_ids: list[str]) -> str:
 # Auth + tool enforcement middleware
 # PUBLIC_PATHS: bisa diakses tanpa token
 # ---------------------------------------------------------------------------
-PUBLIC_PATHS = {"/health", "/", "/api/login"}
+PUBLIC_PATHS = {"/health", "/", "/api/login", "/overview", "/strategies", "/jobs", "/results", "/connect"}
 
 class BearerAuthMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
@@ -166,6 +166,8 @@ class BearerAuthMiddleware(BaseHTTPMiddleware):
 async def health(request: Request):
     return JSONResponse({"status": "ok", "server": "freqtrade-mcp", "version": "1.0.0"})
 
+SPA_ROUTES = {"/overview", "/strategies", "/jobs", "/results", "/connect"}
+
 async def dashboard(request: Request):
     return HTMLResponse((BASE_DIR / "dashboard.html").read_text())
 
@@ -192,6 +194,11 @@ app = Starlette(
     routes=[
         Route("/health",    health),
         Route("/",          dashboard),
+        Route("/overview",  dashboard),
+        Route("/strategies",dashboard),
+        Route("/jobs",      dashboard),
+        Route("/results",   dashboard),
+        Route("/connect",   dashboard),
         Route("/api/login", api_login, methods=["POST"]),
         Mount("/",          app=sse_app),
     ],

@@ -915,25 +915,25 @@ pre {
 
       <nav>
         <div class="nav-section">Menu</div>
-        <div class="nav-item active" onclick="switchPage('dashboard', this)" title="Overview">
+        <div class="nav-item active" data-page="dashboard" title="Overview">
           <span class="nav-icon">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
           </span>
           <span class="nav-label">Overview</span>
         </div>
-        <div class="nav-item" onclick="switchPage('strategies', this)" title="Strategies">
+        <div class="nav-item" data-page="strategies" title="Strategies">
           <span class="nav-icon">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
           </span>
           <span class="nav-label">Strategies</span>
         </div>
-        <div class="nav-item" onclick="switchPage('jobs', this)" title="Jobs">
+        <div class="nav-item" data-page="jobs" title="Jobs">
           <span class="nav-icon">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
           </span>
           <span class="nav-label">Jobs</span>
         </div>
-        <div class="nav-item" onclick="switchPage('results', this)" title="Results">
+        <div class="nav-item" data-page="results" title="Results">
           <span class="nav-icon">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
           </span>
@@ -941,7 +941,7 @@ pre {
         </div>
 
         <div class="nav-section">System</div>
-        <div class="nav-item" onclick="switchPage('connect', this)" title="Koneksi Hermes">
+        <div class="nav-item" data-page="connect" title="Koneksi Hermes">
           <span class="nav-icon">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
           </span>
@@ -1405,10 +1405,17 @@ function hideErr() { document.getElementById('login-err').style.display = 'none'
 function showApp() {
   document.getElementById('login-screen').style.display = 'none';
   document.getElementById('app').style.display = 'block';
-  // Update user badge
   if (SESSION) {
     document.getElementById('user-name').textContent = SESSION.username;
     document.getElementById('user-avatar').textContent = SESSION.username.charAt(0).toUpperCase();
+  }
+  // Navigasi ke halaman sesuai URL saat ini
+  const page = pathToPage(location.pathname);
+  switchPage(page, false);
+  // Set URL yang benar tanpa tambah history entry
+  const correctPath = PAGE_TO_PATH[page] || '/overview';
+  if (location.pathname !== correctPath) {
+    history.replaceState({ page }, '', correctPath);
   }
   startRefresh();
 }
@@ -1428,6 +1435,12 @@ window.addEventListener('load', async () => {
     document.getElementById('btn-hamburger').style.display = 'flex';
   }
 
+  // Nav click delegation
+  document.querySelector('nav').addEventListener('click', e => {
+    const item = e.target.closest('.nav-item[data-page]');
+    if (item && SESSION) switchPage(item.dataset.page);
+  });
+
   // Keyboard login
   document.getElementById('inp-pass').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
   document.getElementById('inp-user').addEventListener('keydown', e => { if (e.key === 'Enter') document.getElementById('inp-pass').focus(); });
@@ -1446,21 +1459,61 @@ window.addEventListener('load', async () => {
 
 /* ── Navigation ─────────────────────────────────────────────────────── */
 const PAGE_TITLES = {
-  dashboard: 'Overview',
+  overview:   'Overview',
   strategies: 'Strategies',
-  jobs: 'Jobs',
-  results: 'Results',
-  connect: 'Koneksi Hermes',
+  jobs:       'Jobs',
+  results:    'Results',
+  connect:    'Koneksi Hermes',
 };
 
-function switchPage(name, el) {
+// Map URL path → page id (page div id pakai nama lama "dashboard" untuk overview)
+const PATH_TO_PAGE = {
+  '/overview':    'dashboard',
+  '/strategies':  'strategies',
+  '/jobs':        'jobs',
+  '/results':     'results',
+  '/connect':     'connect',
+};
+
+const PAGE_TO_PATH = {
+  dashboard:  '/overview',
+  strategies: '/strategies',
+  jobs:       '/jobs',
+  results:    '/results',
+  connect:    '/connect',
+};
+
+function switchPage(name, pushHistory = true) {
+  // name = page id (dashboard, strategies, jobs, results, connect)
   document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
-  el.classList.add('active');
+  const navEl = document.querySelector(`.nav-item[data-page="${name}"]`);
+  if (navEl) navEl.classList.add('active');
+
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.getElementById('page-' + name).classList.add('active');
-  document.getElementById('topbar-title').textContent = PAGE_TITLES[name] || name;
+
+  const title = PAGE_TITLES[name] || PAGE_TITLES['overview'];
+  document.getElementById('topbar-title').textContent = title;
+  document.title = `${title} — Freqtrade MCP`;
+
   currentPage = name;
+
+  if (pushHistory) {
+    const path = PAGE_TO_PATH[name] || '/overview';
+    history.pushState({ page: name }, '', path);
+  }
+
   if (window.innerWidth <= 768) closeMobileSidebar();
+}
+
+// Browser back/forward
+window.addEventListener('popstate', e => {
+  const page = e.state?.page || pathToPage(location.pathname);
+  switchPage(page, false);
+});
+
+function pathToPage(path) {
+  return PATH_TO_PAGE[path] || 'dashboard';
 }
 
 /* ── API ────────────────────────────────────────────────────────────── */
