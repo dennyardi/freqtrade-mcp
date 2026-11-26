@@ -51,6 +51,27 @@ except Exception as e:
     raise RuntimeError(f"Startup gagal: {e}") from e
 
 # ---------------------------------------------------------------------------
+# Patch freqtrade config.json — hapus api_server block yang menyebabkan
+# "jwt_secret_key is too short" error meski api_server.enabled = false
+# ---------------------------------------------------------------------------
+def _patch_freqtrade_config() -> None:
+    from config import DEFAULT_EXCHANGE_CONFIG
+    import json as _json
+    cfg_path = Path(DEFAULT_EXCHANGE_CONFIG)
+    if not cfg_path.exists():
+        return
+    try:
+        cfg = _json.loads(cfg_path.read_text())
+        if "api_server" in cfg:
+            del cfg["api_server"]
+            cfg_path.write_text(_json.dumps(cfg, indent=2))
+            logger.info("Patched freqtrade config: api_server block removed")
+    except Exception as e:
+        logger.warning("Could not patch freqtrade config: %s", e)
+
+_patch_freqtrade_config()
+
+# ---------------------------------------------------------------------------
 # Dashboard HTML cache (baca sekali saat startup)
 # ---------------------------------------------------------------------------
 _DASHBOARD_HTML = (BASE_DIR / "dashboard.html").read_text()

@@ -61,36 +61,47 @@ async def _execute_hyperopt(job, epochs, spaces, timerange):
     proc = await asyncio.create_subprocess_exec(
         *cmd,
         stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.STDOUT,
+        stderr=asyncio.subprocess.PIPE,
     )
     job.process = proc
 
-    lines = []
-    async for raw in proc.stdout:
-        line = raw.decode(errors="replace")
-        lines.append(line)
-        if "Epoch" in line and "/" in line:
-            try:
-                parts = [t for t in line.split() if "/" in t][0]
-                current, total = parts.split("/")
-                job.progress = min(int(int(current) / int(total) * 100), 99)
-                job.persist()
-            except Exception:
-                pass
+    stdout_lines = []
+    stderr_lines = []
 
+    async def read_stdout():
+        async for raw in proc.stdout:
+            line = raw.decode(errors="replace")
+            stdout_lines.append(line)
+            if "Epoch" in line and "/" in line:
+                try:
+                    parts = [t for t in line.split() if "/" in t][0]
+                    current, total = parts.split("/")
+                    job.progress = min(int(int(current) / int(total) * 100), 99)
+                    job.persist()
+                except Exception:
+                    pass
+
+    async def read_stderr():
+        async for raw in proc.stderr:
+            stderr_lines.append(raw.decode(errors="replace"))
+
+    await asyncio.gather(read_stdout(), read_stderr())
     await proc.wait()
-    output = "".join(lines)
+
+    output = "".join(stdout_lines)
+    err_output = "".join(stderr_lines)
+    combined = output + err_output
     job.finished_at = datetime.utcnow().isoformat()
 
     if proc.returncode != 0:
         job.status = JobStatus.FAILED
-        job.error  = output[-3000:]
+        job.error  = combined[-3000:] or f"Process exited with code {proc.returncode}"
         job.persist()
         return
 
     job.status   = JobStatus.COMPLETED
     job.progress = 100
-    job.result   = {"log": output[-3000:]}
+    job.result   = {"log": combined[-3000:]}
     job.persist()
 
 
