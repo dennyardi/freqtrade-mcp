@@ -6,7 +6,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Any, Optional
 
-from tools.db import init_db, save_job, load_all_jobs
+from tools.db import init_db, save_job, save_job_async, load_all_jobs
 
 
 class JobStatus(str, Enum):
@@ -44,7 +44,12 @@ class Job:
         }
 
     def persist(self) -> None:
-        save_job(self)
+        """Gunakan async save jika event loop aktif, fallback sync untuk bootstrap."""
+        try:
+            loop = asyncio.get_running_loop()
+            loop.create_task(save_job_async(self))
+        except RuntimeError:
+            save_job(self)
 
 
 _jobs: dict[str, "Job"] = {}

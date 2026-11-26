@@ -8,6 +8,11 @@ from pathlib import Path
 
 from config import FREQTRADE_BIN, USER_DATA_DIR, DEFAULT_EXCHANGE_CONFIG
 from tools.jobs import _jobs, Job, JobStatus
+from tools.strategy import _validate_name
+from tools.backtest import _SAFE_TIMERANGE
+
+# Hyperopt spaces yang diizinkan
+_VALID_SPACES = {"buy", "sell", "roi", "stoploss", "trailing", "protection", "default", "all"}
 
 
 async def run_hyperopt(
@@ -16,12 +21,22 @@ async def run_hyperopt(
     spaces: list[str] | None = None,
     timerange: str | None = None,
 ) -> dict:
-    job_id = str(uuid.uuid4())[:8]
+    if not _validate_name(strategy_name):
+        return {"error": f"Strategy name tidak valid: {strategy_name}"}
+    if not isinstance(epochs, int) or epochs < 1 or epochs > 10000:
+        return {"error": "epochs harus integer antara 1–10000"}
+    if spaces is None:
+        spaces = ["roi", "stoploss"]
+    invalid_spaces = [s for s in spaces if s not in _VALID_SPACES]
+    if invalid_spaces:
+        return {"error": f"Space tidak valid: {invalid_spaces}. Pilihan: {sorted(_VALID_SPACES)}"}
+    if timerange and not _SAFE_TIMERANGE.match(timerange):
+        return {"error": f"Timerange tidak valid: {timerange}"}
+
+    job_id = uuid.uuid4().hex[:12]
     job = Job(job_id=job_id, job_type="hyperopt", strategy_name=strategy_name)
     _jobs[job_id] = job
     job.persist()
-    if spaces is None:
-        spaces = ["roi", "stoploss"]
     asyncio.create_task(_execute_hyperopt(job, epochs, spaces, timerange))
     return {"job_id": job_id, "status": "pending", "message": f"Hyperopt queued ({epochs} epochs)"}
 
@@ -30,34 +45,30 @@ async def _execute_hyperopt(job, epochs, spaces, timerange):
     job.status = JobStatus.RUNNING
     job.persist()
 
-    spaces_arg    = " ".join(spaces)
-    timerange_arg = f"--timerange {timerange}" if timerange else ""
+    cmd = [
+        FREQTRADE_BIN, "hyperopt",
+        "--config", DEFAULT_EXCHANGE_CONFIG,
+        "--strategy", job.strategy_name,
+        "--hyperopt-loss", "SharpeHyperOptLoss",
+        "--spaces", *spaces,
+        "--epochs", str(epochs),
+        "--userdir", USER_DATA_DIR,
+        "--print-json", "-j", "-1",
+    ]
+    if timerange:
+        cmd += ["--timerange", timerange]
 
-    cmd = (
-        f"{FREQTRADE_BIN} hyperopt"
-        f" --config {DEFAULT_EXCHANGE_CONFIG}"
-        f" --strategy {job.strategy_name}"
-        f" --hyperopt-loss SharpeHyperOptLoss"
-        f" --spaces {spaces_arg}"
-        f" --epochs {epochs}"
-        f" {timerange_arg}"
-        f" --userdir {USER_DATA_DIR}"
-        f" --print-json -j -1"
-    )
-
-    proc = await asyncio.create_subprocess_shell(
-        cmd,
+    proc = await asyncio.create_subprocess_exec(
+        *cmd,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.STDOUT,
     )
     job.process = proc
 
-    # Stream output dan update progress berdasarkan epoch
     lines = []
     async for raw in proc.stdout:
         line = raw.decode(errors="replace")
         lines.append(line)
-        # Freqtrade hyperopt mencetak "Epoch X/Y" — parse progress
         if "Epoch" in line and "/" in line:
             try:
                 parts = [t for t in line.split() if "/" in t][0]
@@ -95,14 +106,11 @@ async def get_hyperopt_results(job_id: str) -> dict:
     if not files:
         return {"error": "No hyperopt result file found"}
 
-    show_cmd = (
-        f"{FREQTRADE_BIN} hyperopt-show"
-        f" --userdir {USER_DATA_DIR}"
-        f" --hyperopt-filename {files[0].name}"
-        f" --best --print-json --no-header"
-    )
-    proc = await asyncio.create_subprocess_shell(
-        show_cmd,
+    proc = await asyncio.create_subprocess_exec(
+        FREQTRADE_BIN, "hyperopt-show",
+        "--userdir", USER_DATA_DIR,
+        "--hyperopt-filename", files[0].name,
+        "--best", "--print-json", "--no-header",
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
     )

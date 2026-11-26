@@ -2,12 +2,31 @@
 
 import asyncio
 import json
+import re
 import uuid
 from datetime import datetime
 from pathlib import Path
 
 from config import FREQTRADE_BIN, USER_DATA_DIR, DEFAULT_EXCHANGE_CONFIG, RESULTS_DIR
 from tools.jobs import _jobs, Job, JobStatus
+from tools.strategy import _validate_name
+
+# Whitelist timeframe yang diizinkan
+_VALID_TIMEFRAMES = {"1m", "3m", "5m", "15m", "30m", "1h", "2h", "4h", "6h", "8h", "12h", "1d", "3d", "1w"}
+
+# Timerange: YYYYMMDD-YYYYMMDD atau YYYYMMDD
+_SAFE_TIMERANGE = re.compile(r'^\d{8}(-\d{8})?$')
+
+# Pair format: BASE/QUOTE atau BASE/QUOTE:SETTLE
+_SAFE_PAIR = re.compile(r'^[A-Z0-9]{2,10}/[A-Z0-9]{2,10}(:[A-Z0-9]{2,10})?$')
+
+
+def _validate_pairs(pairs: list[str]) -> list[str] | None:
+    """Return sanitized pairs atau None jika ada yang invalid."""
+    for p in pairs:
+        if not _SAFE_PAIR.match(p):
+            return None
+    return pairs
 
 
 async def run_backtest(
@@ -16,7 +35,17 @@ async def run_backtest(
     timeframe: str = "1h",
     timerange: str | None = None,
 ) -> dict:
-    job_id = str(uuid.uuid4())[:8]
+    if not _validate_name(strategy_name):
+        return {"error": f"Strategy name tidak valid: {strategy_name}"}
+    if timeframe not in _VALID_TIMEFRAMES:
+        return {"error": f"Timeframe tidak valid: {timeframe}"}
+    if pairs:
+        if _validate_pairs(pairs) is None:
+            return {"error": "Format pair tidak valid. Gunakan format BASE/QUOTE (contoh: BTC/USDT)"}
+    if timerange and not _SAFE_TIMERANGE.match(timerange):
+        return {"error": f"Timerange tidak valid: {timerange}. Format: YYYYMMDD atau YYYYMMDD-YYYYMMDD"}
+
+    job_id = uuid.uuid4().hex[:12]
     job = Job(job_id=job_id, job_type="backtest", strategy_name=strategy_name)
     _jobs[job_id] = job
     job.persist()
@@ -28,35 +57,35 @@ async def _execute_backtest(job, pairs, timeframe, timerange):
     job.status = JobStatus.RUNNING
     job.persist()
 
-    pairs_args   = "--pairs " + " ".join(f'"{p}"' for p in pairs) if pairs else ""
-    timerange_arg = f"--timerange {timerange}" if timerange else ""
-    result_file  = RESULTS_DIR / f"backtest_{job.job_id}.json"
+    result_file = RESULTS_DIR / f"backtest_{job.job_id}.json"
 
-    cmd = (
-        f"{FREQTRADE_BIN} backtesting"
-        f" --config {DEFAULT_EXCHANGE_CONFIG}"
-        f" --strategy {job.strategy_name}"
-        f" --timeframe {timeframe}"
-        f" {pairs_args} {timerange_arg}"
-        f" --userdir {USER_DATA_DIR}"
-        f" --export trades"
-        f" --export-filename {result_file}"
-        f" --breakdown month"
-    )
+    # Bangun argumen sebagai list (tidak lewat shell — tidak ada injection)
+    cmd = [
+        FREQTRADE_BIN, "backtesting",
+        "--config", DEFAULT_EXCHANGE_CONFIG,
+        "--strategy", job.strategy_name,
+        "--timeframe", timeframe,
+        "--userdir", USER_DATA_DIR,
+        "--export", "trades",
+        "--export-filename", str(result_file),
+        "--breakdown", "month",
+    ]
+    if pairs:
+        cmd += ["--pairs"] + pairs
+    if timerange:
+        cmd += ["--timerange", timerange]
 
-    proc = await asyncio.create_subprocess_shell(
-        cmd,
+    proc = await asyncio.create_subprocess_exec(
+        *cmd,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.STDOUT,
     )
     job.process = proc
 
-    # Stream output baris per baris agar progress bisa diupdate
     lines = []
     async for raw in proc.stdout:
         line = raw.decode(errors="replace")
         lines.append(line)
-        # Freqtrade mencetak "Backtesting with X%" — parse progress kasar
         if "%" in line:
             try:
                 pct_str = [t for t in line.split() if "%" in t][0].replace("%", "")
@@ -104,15 +133,15 @@ async def get_backtest_results(job_id: str) -> dict:
         for strat, m in data["strategy"].items():
             total = max(m.get("total_trades", 1), 1)
             summary[strat] = {
-                "total_trades":    m.get("total_trades"),
-                "win_rate":        round(m.get("wins", 0) / total * 100, 2),
+                "total_trades":     m.get("total_trades"),
+                "win_rate":         round(m.get("wins", 0) / total * 100, 2),
                 "profit_total_pct": m.get("profit_total_pct"),
-                "profit_factor":   m.get("profit_factor"),
+                "profit_factor":    m.get("profit_factor"),
                 "max_drawdown_pct": m.get("max_drawdown_account"),
-                "sharpe":          m.get("sharpe"),
-                "calmar":          m.get("calmar"),
-                "sortino":         m.get("sortino"),
-                "avg_duration":    m.get("holding_avg"),
+                "sharpe":           m.get("sharpe"),
+                "calmar":           m.get("calmar"),
+                "sortino":          m.get("sortino"),
+                "avg_duration":     m.get("holding_avg"),
             }
 
     return {"job_id": job_id, "summary": summary, "raw_file": str(result_file)}

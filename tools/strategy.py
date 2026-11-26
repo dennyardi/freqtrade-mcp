@@ -1,9 +1,17 @@
 """Tool: create_strategy & validate_strategy."""
 
 import asyncio
+import re
 import textwrap
 from pathlib import Path
 from config import FREQTRADE_BIN, USER_DATA_DIR, STRATEGIES_DIR
+
+# Hanya nama strategy yang aman: huruf, angka, underscore
+_SAFE_NAME = re.compile(r'^[A-Za-z][A-Za-z0-9_]{0,63}$')
+
+
+def _validate_name(name: str) -> bool:
+    return bool(_SAFE_NAME.match(name))
 
 
 async def create_strategy(
@@ -11,6 +19,9 @@ async def create_strategy(
     description: str,
     timeframe: str = "1h",
 ) -> dict:
+    if not _validate_name(name):
+        return {"error": f"Strategy name '{name}' tidak valid. Gunakan huruf, angka, underscore (mulai huruf)."}
+
     file_path = Path(STRATEGIES_DIR) / f"{name}.py"
     if file_path.exists():
         return {"error": f"Strategy '{name}' already exists at {file_path}"}
@@ -86,13 +97,13 @@ async def create_strategy(
 
 
 async def validate_strategy(strategy_name: str) -> dict:
-    cmd = (
-        f"{FREQTRADE_BIN} check-freqtrade-files"
-        f" --strategy {strategy_name}"
-        f" --userdir {USER_DATA_DIR}"
-    )
-    proc = await asyncio.create_subprocess_shell(
-        cmd,
+    if not _validate_name(strategy_name):
+        return {"error": f"Strategy name '{strategy_name}' tidak valid."}
+
+    proc = await asyncio.create_subprocess_exec(
+        FREQTRADE_BIN, "check-freqtrade-files",
+        "--strategy", strategy_name,
+        "--userdir", USER_DATA_DIR,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.STDOUT,
     )
