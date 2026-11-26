@@ -100,4 +100,9 @@ async def compare_strategies(job_ids: list[str]) -> dict:
             })
 
     rows.sort(key=lambda x: x.get("sharpe") or 0, reverse=True)
-    return {"comparison": rows, "best": rows[0] if rows else None}
+
+    # B-06: hanya pilih best dari baris yang punya data valid (bukan error entries)
+    valid_rows = [r for r in rows if "error" not in r and r.get("sharpe") is not None]
+    best = valid_rows[0] if valid_rows else None
+
+    return {"comparison": rows, "best": best}

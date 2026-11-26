@@ -9,7 +9,7 @@ from pathlib import Path
 from config import FREQTRADE_BIN, USER_DATA_DIR, DEFAULT_EXCHANGE_CONFIG
 from tools.jobs import _jobs, Job, JobStatus
 from tools.strategy import _validate_name
-from tools.backtest import _SAFE_TIMERANGE
+from tools.backtest import _SAFE_TIMERANGE, _validate_pairs, _SAFE_PAIR
 
 # Hyperopt spaces yang diizinkan
 _VALID_SPACES = {"buy", "sell", "roi", "stoploss", "trailing", "protection", "default", "all"}
@@ -20,6 +20,7 @@ async def run_hyperopt(
     epochs: int = 100,
     spaces: list[str] | None = None,
     timerange: str | None = None,
+    pairs: list[str] | None = None,
 ) -> dict:
     if not _validate_name(strategy_name):
         return {"error": f"Strategy name tidak valid: {strategy_name}"}
@@ -32,16 +33,27 @@ async def run_hyperopt(
         return {"error": f"Space tidak valid: {invalid_spaces}. Pilihan: {sorted(_VALID_SPACES)}"}
     if timerange and not _SAFE_TIMERANGE.match(timerange):
         return {"error": f"Timerange tidak valid: {timerange}"}
+    # B-07: validasi pairs jika disertakan
+    if pairs is not None and len(pairs) == 0:
+        return {"error": "pairs tidak boleh kosong. Sertakan minimal 1 pair atau hapus argumen pairs."}
+    if pairs and _validate_pairs(pairs) is None:
+        return {"error": "Format pair tidak valid. Gunakan format BASE/QUOTE (contoh: BTC/USDT)"}
+
+    # Validasi keberadaan strategy sebelum queue
+    from pathlib import Path
+    from config import STRATEGIES_DIR
+    if not (Path(STRATEGIES_DIR) / f"{strategy_name}.py").exists():
+        return {"error": f"Strategy '{strategy_name}' tidak ditemukan."}
 
     job_id = uuid.uuid4().hex[:12]
     job = Job(job_id=job_id, job_type="hyperopt", strategy_name=strategy_name)
     _jobs[job_id] = job
     job.persist()
-    asyncio.create_task(_execute_hyperopt(job, epochs, spaces, timerange))
+    asyncio.create_task(_execute_hyperopt(job, epochs, spaces, timerange, pairs))
     return {"job_id": job_id, "status": "pending", "message": f"Hyperopt queued ({epochs} epochs)"}
 
 
-async def _execute_hyperopt(job, epochs, spaces, timerange):
+async def _execute_hyperopt(job, epochs, spaces, timerange, pairs=None):
     job.status = JobStatus.RUNNING
     job.persist()
 
@@ -57,6 +69,9 @@ async def _execute_hyperopt(job, epochs, spaces, timerange):
     ]
     if timerange:
         cmd += ["--timerange", timerange]
+    # B-07: teruskan pairs ke hyperopt
+    if pairs:
+        cmd += ["--pairs"] + pairs
 
     proc = await asyncio.create_subprocess_exec(
         *cmd,

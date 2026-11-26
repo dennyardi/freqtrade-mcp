@@ -9,7 +9,7 @@ import io
 from datetime import datetime
 from pathlib import Path
 
-from config import FREQTRADE_BIN, USER_DATA_DIR, DEFAULT_EXCHANGE_CONFIG, RESULTS_DIR
+from config import FREQTRADE_BIN, USER_DATA_DIR, DEFAULT_EXCHANGE_CONFIG, RESULTS_DIR, STRATEGIES_DIR
 from tools.jobs import _jobs, Job, JobStatus
 from tools.strategy import _validate_name
 
@@ -40,10 +40,19 @@ async def run_backtest(
         return {"error": f"Strategy name tidak valid: {strategy_name}"}
     if timeframe not in _VALID_TIMEFRAMES:
         return {"error": f"Timeframe tidak valid: {timeframe}"}
+
+    # B-05: pairs kosong diam-diam pakai pairlist config → tolak eksplisit
+    if pairs is not None and len(pairs) == 0:
+        return {"error": "pairs tidak boleh kosong. Sertakan minimal 1 pair (contoh: [\"BTC/USDT\"]) atau hapus argumen pairs."}
     if pairs and _validate_pairs(pairs) is None:
         return {"error": "Format pair tidak valid. Gunakan format BASE/QUOTE (contoh: BTC/USDT)"}
     if timerange and not _SAFE_TIMERANGE.match(timerange):
         return {"error": f"Timerange tidak valid: {timerange}. Format: YYYYMMDD atau YYYYMMDD-YYYYMMDD"}
+
+    # B-04: validasi keberadaan file strategy sebelum queue
+    strategy_file = Path(STRATEGIES_DIR) / f"{strategy_name}.py"
+    if not strategy_file.exists():
+        return {"error": f"Strategy '{strategy_name}' tidak ditemukan. Jalankan tool_list_strategies untuk melihat daftar yang tersedia."}
 
     job_id = uuid.uuid4().hex[:12]
     job = Job(job_id=job_id, job_type="backtest", strategy_name=strategy_name)
@@ -249,6 +258,11 @@ async def get_backtest_results(job_id: str) -> dict:
     job = _jobs.get(job_id)
     if not job:
         return {"error": f"Job {job_id} not found"}
+
+    # B-02: tolak eksplisit jika bukan job backtest
+    if job.job_type != "backtest":
+        return {"error": f"Job {job_id} adalah job '{job.job_type}', bukan backtest. Gunakan tool_get_hyperopt_results untuk job hyperopt."}
+
     if job.status != JobStatus.COMPLETED:
         return {"error": f"Job not completed yet, status: {job.status}"}
 

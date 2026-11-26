@@ -100,7 +100,11 @@ def _ensure_baseline_strategy() -> None:
             logger.info("Copied BaselineEma.py to strategies dir")
         except Exception as e:
             logger.warning("Could not copy BaselineEma.py: %s", e)
-    for broken in ("conn_test_emacross.py", "mgr_smoke_ema.py"):
+    for broken in ("conn_test_emacross.py", "mgr_smoke_ema.py",
+                   "mgr_test_ema2.py", "mgr_t_macd.py", "mgr_t_rsi.py",
+                   "rs_test_ema.py", "TestNew.py", "RsTest2.py",
+                   "GenHold.py", "GenRare.py", "GenRare30.py", "GenMacd.py",
+                   "DupTest.py", "EmptyDesc.py"):
         p = Path(STRATEGIES_DIR) / broken
         if p.exists():
             try:
@@ -353,12 +357,14 @@ class BearerAuthMiddleware:
             try:
                 data = json.loads(body)
                 # Format REST /api/tools: {"tool": "...", "args": {...}}
+                # Format MCP /messages/: {"method": "tools/call", "params": {"name": "..."}}
                 tool_name = data.get("tool") or data.get("params", {}).get("name", "")
                 if tool_name and tool_name not in allowed:
                     logger.warning(
                         "Tool denied: %s not allowed for token (path=%s)",
                         tool_name, path,
                     )
+                    # B-01: kembalikan 403 seketika, bukan hang
                     await self._reject(send_with_headers, 403, f"Tool '{tool_name}' not allowed for this token")
                     return
             except Exception:
@@ -445,7 +451,7 @@ _TOOL_MAP = {
     "tool_get_performance_summary": (get_performance_summary,  ["job_id"]),
     "tool_compare_strategies":      (compare_strategies,       ["job_ids"]),
     "tool_run_backtest":            (run_backtest,             ["strategy_name", "pairs", "timeframe", "timerange"]),
-    "tool_run_hyperopt":            (run_hyperopt,             ["strategy_name", "epochs", "spaces", "timerange"]),
+    "tool_run_hyperopt":            (run_hyperopt,             ["strategy_name", "epochs", "spaces", "timerange", "pairs"]),
     "tool_download_data":           (download_data,            ["pairs", "timeframe", "days"]),
     "tool_create_strategy":         (create_strategy,          ["name", "description", "timeframe"]),
     "tool_validate_strategy":       (validate_strategy,        ["strategy_name"]),

@@ -162,6 +162,9 @@ async def create_strategy(
         return {"error": f"Strategy name '{name}' tidak valid. Gunakan huruf, angka, underscore (mulai huruf)."}
     if timeframe not in _VALID_TIMEFRAMES:
         return {"error": f"Timeframe tidak valid: {timeframe}"}
+    # B-09: deskripsi wajib dan bermakna
+    if not description or len(description.strip()) < 10:
+        return {"error": "description wajib diisi dan minimal 10 karakter (jelaskan logika strategi, misal: 'EMA 12/26 crossover with RSI filter')."}
 
     file_path = Path(STRATEGIES_DIR) / f"{name}.py"
     if file_path.exists():
