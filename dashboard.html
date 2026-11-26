@@ -1,70 +1,116 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Freqtrade MCP</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
-/* ── Reset & Base ─────────────────────────────────────────────────────── */
-*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
-
+/* ── Design Tokens ─────────────────────────────────────────────────────── */
 :root {
-  --bg:        #0c0e14;
-  --surface:   #131620;
-  --surface2:  #1a1e2e;
-  --border:    #1f2335;
-  --border2:   #252a3d;
-
-  --accent:    #4f8ef7;
-  --accent-bg: #4f8ef712;
-  --accent-hover: #6ba3ff;
-
-  --green:     #34d399;
-  --green-bg:  #34d39912;
-  --red:       #f87171;
-  --red-bg:    #f8717112;
-  --yellow:    #fbbf24;
-  --yellow-bg: #fbbf2412;
-
-  --text:      #e2e6f0;
-  --text2:     #8892aa;
-  --text3:     #4a5068;
-
-  --radius:    8px;
-  --radius-lg: 12px;
-  --sidebar-w: 220px;
-  --header-h:  52px;
+  --bg-canvas:   #F8FAFC;
+  --bg-surface:  #FFFFFF;
+  --bg-elevated: #F1F5F9;
+  --bg-hover:    #E2E8F0;
+  --border:        rgba(15,23,42,0.08);
+  --border-subtle: rgba(15,23,42,0.04);
+  --border-strong: rgba(15,23,42,0.16);
+  --text-primary:   #0F172A;
+  --text-secondary: #475569;
+  --text-muted:     #64748B;
+  --accent:        #2563EB;
+  --accent-hover:  #1D4ED8;
+  --accent-active: #1E40AF;
+  --accent-tint:   #DBEAFE;
+  --on-accent:     #FFFFFF;
+  --focus-ring:    #2563EB;
+  --focus-offset:  #FFFFFF;
+  --success: #10B981; --success-text: #047857; --success-bg: #ECFDF5;
+  --warning: #F59E0B; --warning-text: #B45309; --warning-bg: #FFFBEB;
+  --danger:  #EF4444; --danger-text:  #B91C1C; --danger-bg:  #FEF2F2;
+  --info:    #38BDF8; --info-text:    #0369A1; --info-bg:    #F0F9FF;
+  --neutral-bg: #F1F5F9; --neutral-text: #475569;
+  --card-shadow: 0 1px 2px 0 rgba(0,0,0,0.03);
+  --sidebar-w: 240px;
+  --sidebar-w-collapsed: 64px;
+  --topbar-h: 56px;
+  --r-xs: 4px; --r-sm: 6px; --r-md: 10px; --r-lg: 14px; --r-xl: 16px; --r-pill: 9999px;
 }
+
+[data-theme="dark"] {
+  --bg-canvas:   #090A0B;
+  --bg-surface:  #111315;
+  --bg-elevated: #181A1D;
+  --bg-hover:    #22252A;
+  --border:        rgba(255,255,255,0.08);
+  --border-subtle: rgba(255,255,255,0.04);
+  --border-strong: rgba(255,255,255,0.16);
+  --text-primary:   #F4F4F5;
+  --text-secondary: #A1A1AA;
+  --text-muted:     #8B8B93;
+  --accent:        #3B82F6;
+  --accent-hover:  #2563EB;
+  --accent-tint:   rgba(59,130,246,0.12);
+  --on-accent:     #FFFFFF;
+  --focus-ring:    #3B82F6;
+  --focus-offset:  #090A0B;
+  --success-text: #34D399; --success-bg: #112722;
+  --warning-text: #FBBF24; --warning-bg: #2C2414;
+  --danger-text:  #F87171; --danger-bg:  #2C191B;
+  --info-text:    #7DD3FC; --info-bg:    #162730;
+  --neutral-bg: #1F2125; --neutral-text: #A1A1AA;
+  --card-shadow: none;
+}
+
+/* ── Reset & Base ──────────────────────────────────────────────────────── */
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 
 html, body { height: 100%; }
 
 body {
-  background: var(--bg);
-  color: var(--text);
-  font-family: 'Geist', system-ui, sans-serif;
+  background: var(--bg-canvas);
+  color: var(--text-primary);
+  font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   font-size: 13px;
+  font-feature-settings: "cv01", "ss03";
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
 }
 
-/* ── Login Screen ─────────────────────────────────────────────────────── */
+/* ── Skeleton ──────────────────────────────────────────────────────────── */
+@keyframes shimmer {
+  0%   { background-position: -400px 0; }
+  100% { background-position: 400px 0; }
+}
+
+.skeleton {
+  border-radius: var(--r-sm);
+  background: linear-gradient(90deg, var(--bg-elevated) 25%, var(--bg-hover) 50%, var(--bg-elevated) 75%);
+  background-size: 800px 100%;
+  animation: shimmer 1.4s infinite linear;
+}
+
+/* ── Focus ─────────────────────────────────────────────────────────────── */
+:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+/* ── Login Screen ──────────────────────────────────────────────────────── */
 #login-screen {
   display: flex;
   align-items: center;
   justify-content: center;
   min-height: 100vh;
-  background: var(--bg);
-  background-image:
-    radial-gradient(ellipse 60% 40% at 50% -10%, #4f8ef718 0%, transparent 70%);
+  background: var(--bg-canvas);
 }
 
-.login-wrap {
-  width: 100%;
-  max-width: 380px;
-  padding: 24px;
+[data-theme="dark"] #login-screen {
+  background-image: radial-gradient(ellipse 60% 40% at 50% -10%, rgba(59,130,246,0.08) 0%, transparent 70%);
 }
+
+.login-wrap { width: 100%; max-width: 380px; padding: 24px; }
 
 .login-logo {
   display: flex;
@@ -76,65 +122,54 @@ body {
 .login-logo-icon {
   width: 36px; height: 36px;
   background: var(--accent);
-  border-radius: 10px;
+  border-radius: var(--r-md);
   display: flex; align-items: center; justify-content: center;
-  font-size: 18px;
   flex-shrink: 0;
-  box-shadow: 0 0 24px #4f8ef730;
 }
+
+.login-logo-icon svg { width: 20px; height: 20px; color: var(--on-accent); }
 
 .login-logo-text h1 {
-  font-size: 16px;
-  font-weight: 700;
-  letter-spacing: -0.02em;
-  line-height: 1.1;
+  font-size: 15px; font-weight: 600;
+  letter-spacing: -0.02em; line-height: 1.1;
+  color: var(--text-primary);
 }
 
-.login-logo-text p {
-  font-size: 11px;
-  color: var(--text2);
-  margin-top: 1px;
-}
+.login-logo-text p { font-size: 11px; color: var(--text-muted); margin-top: 1px; }
 
 .login-card {
-  background: var(--surface);
-  border: 1px solid var(--border2);
-  border-radius: var(--radius-lg);
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
   padding: 28px;
+  box-shadow: var(--card-shadow);
 }
 
 .login-card h2 {
-  font-size: 17px;
-  font-weight: 700;
-  letter-spacing: -0.02em;
-  margin-bottom: 4px;
+  font-size: 20px; font-weight: 600;
+  letter-spacing: -0.02em; margin-bottom: 4px;
 }
 
-.login-card .login-sub {
-  font-size: 12px;
-  color: var(--text2);
-  margin-bottom: 24px;
-}
+.login-card .login-sub { font-size: 13px; color: var(--text-secondary); margin-bottom: 24px; }
 
 .field { margin-bottom: 14px; }
 
 .field label {
   display: block;
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--text2);
+  font-size: 11px; font-weight: 500;
+  color: var(--text-secondary);
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.05em;
   margin-bottom: 6px;
 }
 
 .field input {
   width: 100%;
-  background: var(--bg);
-  border: 1px solid var(--border2);
-  border-radius: var(--radius);
+  background: var(--bg-canvas);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
   padding: 9px 12px;
-  color: var(--text);
+  color: var(--text-primary);
   font-size: 13px;
   font-family: inherit;
   outline: none;
@@ -142,254 +177,282 @@ body {
 }
 
 .field input:focus { border-color: var(--accent); }
-.field input::placeholder { color: var(--text3); }
+.field input::placeholder { color: var(--text-muted); }
 
 .btn-primary {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
+  display: flex; align-items: center; justify-content: center; gap: 6px;
   width: 100%;
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
   border: none;
-  border-radius: var(--radius);
-  padding: 10px 16px;
-  font-size: 13px;
-  font-weight: 600;
+  border-radius: var(--r-sm);
+  padding: 9px 16px;
+  font-size: 13px; font-weight: 500;
   font-family: inherit;
   cursor: pointer;
-  transition: background 0.15s, transform 0.1s;
+  transition: background 0.15s;
   margin-top: 4px;
 }
 
 .btn-primary:hover { background: var(--accent-hover); }
-.btn-primary:active { transform: scale(0.98); }
-.btn-primary:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+.btn-primary:active { background: var(--accent-active); }
+.btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .login-error {
   display: none;
   align-items: center;
   gap: 6px;
-  background: var(--red-bg);
-  border: 1px solid #f8717130;
-  border-radius: var(--radius);
+  background: var(--danger-bg);
+  border: 1px solid rgba(239,68,68,0.2);
+  border-radius: var(--r-sm);
   padding: 9px 12px;
-  color: var(--red);
+  color: var(--danger-text);
   font-size: 12px;
   margin-top: 12px;
 }
 
-/* ── App Shell ────────────────────────────────────────────────────────── */
+/* ── App Shell ─────────────────────────────────────────────────────────── */
 #app { display: none; height: 100vh; overflow: hidden; }
 
-/* ── Sidebar ──────────────────────────────────────────────────────────── */
-.layout {
-  display: flex;
-  height: 100vh;
-  overflow: hidden;
-}
+.layout { display: flex; height: 100vh; overflow: hidden; }
 
+/* ── Sidebar ───────────────────────────────────────────────────────────── */
 aside {
   width: var(--sidebar-w);
-  background: var(--surface);
+  background: var(--bg-surface);
   border-right: 1px solid var(--border);
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
-  overflow-y: auto;
+  overflow: hidden;
+  transition: width 0.2s ease;
+  position: relative;
+  z-index: 10;
 }
+
+aside.collapsed { width: var(--sidebar-w-collapsed); }
 
 .sidebar-header {
   display: flex;
   align-items: center;
-  gap: 9px;
-  padding: 16px 16px 12px;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 14px 16px;
   border-bottom: 1px solid var(--border);
+  min-height: 56px;
+}
+
+.sidebar-brand {
+  display: flex; align-items: center; gap: 9px;
+  overflow: hidden; min-width: 0;
 }
 
 .sidebar-logo-icon {
   width: 28px; height: 28px;
   background: var(--accent);
-  border-radius: 7px;
+  border-radius: var(--r-sm);
   display: flex; align-items: center; justify-content: center;
-  font-size: 15px;
   flex-shrink: 0;
 }
 
+.sidebar-logo-icon svg { width: 16px; height: 16px; color: var(--on-accent); }
+
 .sidebar-logo-text {
-  font-size: 13px;
-  font-weight: 700;
-  letter-spacing: -0.02em;
-  line-height: 1.2;
+  overflow: hidden;
+  transition: opacity 0.15s, width 0.2s;
 }
 
-.sidebar-logo-sub {
-  font-size: 10px;
-  color: var(--text2);
+.sidebar-logo-text .name {
+  font-size: 13px; font-weight: 600;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  color: var(--text-primary);
 }
 
-nav {
-  padding: 10px 8px;
-  flex: 1;
+.sidebar-logo-text .sub { font-size: 10px; color: var(--text-muted); white-space: nowrap; }
+
+.btn-collapse {
+  background: none; border: none; cursor: pointer;
+  color: var(--text-muted);
+  padding: 4px; border-radius: var(--r-xs);
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+  transition: color 0.15s, background 0.15s;
 }
+
+.btn-collapse:hover { background: var(--bg-hover); color: var(--text-primary); }
+.btn-collapse svg { width: 16px; height: 16px; }
+
+aside.collapsed .sidebar-logo-text { opacity: 0; width: 0; overflow: hidden; }
+aside.collapsed .btn-collapse svg { transform: rotate(180deg); }
+
+nav { padding: 10px 8px; flex: 1; overflow-y: auto; overflow-x: hidden; }
 
 .nav-section {
-  font-size: 10px;
-  font-weight: 700;
-  color: var(--text3);
+  font-size: 10px; font-weight: 500;
+  color: var(--text-muted);
   text-transform: uppercase;
   letter-spacing: 0.08em;
   padding: 10px 8px 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  transition: opacity 0.15s;
 }
+
+aside.collapsed .nav-section { opacity: 0; }
 
 .nav-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+  display: flex; align-items: center; gap: 10px;
   padding: 7px 8px;
-  border-radius: 6px;
+  border-radius: var(--r-sm);
   cursor: pointer;
-  color: var(--text2);
-  font-size: 13px;
-  font-weight: 500;
-  transition: all 0.1s;
+  color: var(--text-secondary);
+  font-size: 13px; font-weight: 400;
+  transition: background 0.1s, color 0.1s;
   user-select: none;
   margin-bottom: 1px;
+  white-space: nowrap;
+  overflow: hidden;
 }
 
-.nav-item:hover {
-  background: var(--surface2);
-  color: var(--text);
-}
+.nav-item:hover { background: var(--bg-hover); color: var(--text-primary); }
 
 .nav-item.active {
-  background: var(--accent-bg);
+  background: var(--accent-tint);
   color: var(--accent);
+  font-weight: 500;
 }
 
-.nav-item .nav-icon {
-  font-size: 15px;
-  width: 18px;
-  text-align: center;
+.nav-icon {
   flex-shrink: 0;
+  width: 18px; height: 18px;
+  display: flex; align-items: center; justify-content: center;
 }
+
+.nav-icon svg { width: 16px; height: 16px; }
+
+.nav-label { overflow: hidden; transition: opacity 0.15s, width 0.2s; }
+aside.collapsed .nav-label { opacity: 0; width: 0; }
 
 .sidebar-footer {
   padding: 12px 8px;
   border-top: 1px solid var(--border);
 }
 
-.server-status-pill {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  padding: 8px 10px;
-  background: var(--surface2);
-  border-radius: 7px;
-  font-size: 12px;
-  color: var(--text2);
+.server-status {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px;
+  border-radius: var(--r-sm);
   margin-bottom: 8px;
+  overflow: hidden;
 }
 
 .status-dot {
   width: 7px; height: 7px;
   border-radius: 50%;
-  background: var(--green);
+  background: var(--success);
   flex-shrink: 0;
 }
 
-.status-dot.offline { background: var(--red); }
 .status-dot.online { animation: blink 2s ease-in-out infinite; }
+.status-dot.offline { background: var(--danger); animation: none; }
 @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
 
-.status-info { flex: 1; }
-.status-name { font-weight: 600; font-size: 11px; color: var(--text); }
-.status-sub { font-size: 10px; color: var(--text3); }
+.status-info { overflow: hidden; transition: opacity 0.15s, width 0.2s; }
+.status-name { font-size: 11px; font-weight: 500; color: var(--text-primary); white-space: nowrap; }
+.status-sub { font-size: 10px; color: var(--text-muted); white-space: nowrap; }
+aside.collapsed .status-info { opacity: 0; width: 0; }
 
 .btn-logout {
   width: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
+  display: flex; align-items: center; justify-content: center; gap: 6px;
   background: none;
-  border: 1px solid var(--border2);
-  border-radius: 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
   padding: 7px 12px;
-  color: var(--text2);
-  font-size: 12px;
+  color: var(--text-secondary);
+  font-size: 12px; font-weight: 500;
   font-family: inherit;
   cursor: pointer;
-  transition: all 0.15s;
+  transition: border-color 0.15s, color 0.15s;
+  white-space: nowrap; overflow: hidden;
 }
 
-.btn-logout:hover { border-color: var(--red); color: var(--red); }
+.btn-logout:hover { border-color: var(--danger-text); color: var(--danger-text); }
+.btn-logout svg { width: 14px; height: 14px; flex-shrink: 0; }
+aside.collapsed .btn-logout span { display: none; }
 
-/* ── Main Content ─────────────────────────────────────────────────────── */
-.main-area {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
+/* ── Main Area ─────────────────────────────────────────────────────────── */
+.main-area { flex: 1; display: flex; flex-direction: column; overflow: hidden; min-width: 0; }
 
+/* ── Topbar ────────────────────────────────────────────────────────────── */
 .topbar {
-  height: var(--header-h);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+  height: var(--topbar-h);
+  display: flex; align-items: center; justify-content: space-between;
   padding: 0 24px;
   border-bottom: 1px solid var(--border);
+  background: var(--bg-surface);
   flex-shrink: 0;
   gap: 12px;
 }
 
-.topbar-title {
-  font-size: 14px;
-  font-weight: 700;
-  letter-spacing: -0.02em;
+.topbar-left { display: flex; align-items: center; gap: 6px; min-width: 0; }
+
+.breadcrumb {
+  display: flex; align-items: center; gap: 5px;
+  font-size: 13px; color: var(--text-muted);
 }
 
-.topbar-right {
-  display: flex;
-  align-items: center;
-  gap: 10px;
+.breadcrumb-sep { color: var(--text-muted); opacity: 0.5; }
+.breadcrumb-current { color: var(--text-primary); font-weight: 500; }
+
+.topbar-right { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+
+.countdown-txt {
+  font-size: 11px; font-weight: 500;
+  color: var(--text-muted);
+  font-family: "JetBrains Mono", "SFMono-Regular", "Courier New", monospace;
+  font-feature-settings: "tnum";
 }
 
-.refresh-txt {
-  font-size: 11px;
-  color: var(--text3);
-  font-family: 'Geist Mono', monospace;
-}
-
-.btn-refresh {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  background: var(--surface2);
-  border: 1px solid var(--border2);
-  border-radius: 6px;
-  padding: 5px 10px;
-  color: var(--text2);
-  font-size: 12px;
-  font-family: inherit;
+.btn-icon {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  padding: 6px;
+  color: var(--text-secondary);
   cursor: pointer;
-  transition: all 0.15s;
+  display: flex; align-items: center; justify-content: center;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
 }
 
-.btn-refresh:hover { border-color: var(--accent); color: var(--accent); }
+.btn-icon:hover { border-color: var(--border-strong); color: var(--text-primary); background: var(--bg-hover); }
+.btn-icon svg { width: 15px; height: 15px; }
 
-.page {
-  flex: 1;
-  overflow-y: auto;
-  padding: 24px;
-  display: none;
+.user-badge {
+  display: flex; align-items: center; gap: 7px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  padding: 5px 10px;
+  font-size: 12px; font-weight: 500;
+  color: var(--text-secondary);
 }
 
+.user-avatar {
+  width: 20px; height: 20px;
+  background: var(--accent-tint);
+  color: var(--accent);
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 10px; font-weight: 600;
+}
+
+/* ── Pages ─────────────────────────────────────────────────────────────── */
+.page { flex: 1; overflow-y: auto; padding: 24px; display: none; }
 .page.active { display: block; }
 
-/* ── Stat Grid ────────────────────────────────────────────────────────── */
+/* ── Stat Grid ─────────────────────────────────────────────────────────── */
 .stat-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
@@ -398,223 +461,200 @@ nav {
 }
 
 .stat-card {
-  background: var(--surface);
+  background: var(--bg-surface);
   border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  padding: 16px 18px;
+  border-radius: var(--r-md);
+  padding: 20px;
+  box-shadow: var(--card-shadow);
+  transition: border-color 0.15s;
+}
+
+.stat-card:hover { border-color: var(--border-strong); }
+
+.stat-top {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  margin-bottom: 12px;
 }
 
 .stat-label {
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--text2);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  margin-bottom: 8px;
-  display: flex;
-  align-items: center;
-  gap: 5px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  font-weight: 400;
 }
+
+.stat-icon { color: var(--text-muted); }
+.stat-icon svg { width: 16px; height: 16px; }
 
 .stat-num {
-  font-size: 28px;
-  font-weight: 800;
-  letter-spacing: -0.04em;
-  line-height: 1;
-  font-family: 'Geist Mono', monospace;
+  font-size: 26px; font-weight: 600;
+  letter-spacing: -0.03em; line-height: 1.1;
+  font-feature-settings: "tnum";
+  color: var(--text-primary);
+  margin-bottom: 8px;
 }
 
-.stat-num.blue   { color: var(--accent); }
-.stat-num.green  { color: var(--green); }
-.stat-num.yellow { color: var(--yellow); }
-.stat-num.red    { color: var(--red); }
+.stat-num.c-accent  { color: var(--accent); }
+.stat-num.c-success { color: var(--success); }
+.stat-num.c-warning { color: var(--warning); }
+.stat-num.c-danger  { color: var(--danger); }
 
-/* ── Two-col grid ─────────────────────────────────────────────────────── */
-.two-col {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
-  margin-bottom: 16px;
-}
+.stat-delta { display: flex; align-items: center; gap: 6px; }
 
-/* ── Panel ────────────────────────────────────────────────────────────── */
+/* ── Two-col ───────────────────────────────────────────────────────────── */
+.two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px; }
+
+/* ── Panel ─────────────────────────────────────────────────────────────── */
 .panel {
-  background: var(--surface);
+  background: var(--bg-surface);
   border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
+  border-radius: var(--r-md);
   overflow: hidden;
+  box-shadow: var(--card-shadow);
 }
 
 .panel-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+  display: flex; align-items: center; justify-content: space-between;
   padding: 12px 16px;
   border-bottom: 1px solid var(--border);
 }
 
 .panel-title {
-  font-size: 11px;
-  font-weight: 700;
-  color: var(--text2);
+  font-size: 11px; font-weight: 500;
+  color: var(--text-muted);
   text-transform: uppercase;
-  letter-spacing: 0.07em;
+  letter-spacing: 0.05em;
 }
 
 .panel-body { padding: 0; }
 
-/* ── Strategy List ────────────────────────────────────────────────────── */
+/* ── Strategy List ─────────────────────────────────────────────────────── */
 .strat-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+  display: flex; align-items: center; justify-content: space-between;
   padding: 10px 16px;
-  border-bottom: 1px solid var(--border);
-  transition: background 0.1s;
+  border-bottom: 1px solid var(--border-subtle);
+  transition: background 0.12s ease-out;
+  min-height: 44px;
 }
 
 .strat-row:last-child { border-bottom: none; }
-.strat-row:hover { background: var(--surface2); }
+.strat-row:hover { background: var(--bg-hover); }
 
 .strat-name {
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--text);
-  font-family: 'Geist Mono', monospace;
+  font-size: 13px; font-weight: 500;
+  color: var(--text-primary);
+  font-family: "JetBrains Mono", monospace;
+  font-feature-settings: "tnum";
 }
 
-/* ── Job List ─────────────────────────────────────────────────────────── */
+/* ── Job List ──────────────────────────────────────────────────────────── */
 .job-row {
-  padding: 10px 16px;
-  border-bottom: 1px solid var(--border);
-  transition: background 0.1s;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border-subtle);
+  transition: background 0.12s ease-out;
 }
 
 .job-row:last-child { border-bottom: none; }
-.job-row:hover { background: var(--surface2); }
+.job-row:hover { background: var(--bg-hover); }
 
-.job-top {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 3px;
-}
+.job-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
 
 .job-id {
-  font-family: 'Geist Mono', monospace;
-  font-size: 12px;
+  font-family: "JetBrains Mono", monospace;
+  font-size: 12px; font-weight: 500;
   color: var(--accent);
-  font-weight: 500;
+  font-feature-settings: "tnum";
 }
 
-.job-meta {
-  font-size: 11px;
-  color: var(--text2);
-  margin-bottom: 6px;
-}
+.job-meta { font-size: 11px; color: var(--text-muted); margin-bottom: 8px; }
 
-.pbar {
-  height: 2px;
-  background: var(--border2);
-  border-radius: 1px;
-  overflow: hidden;
-}
-
-.pfill {
-  height: 100%;
-  background: var(--accent);
-  border-radius: 1px;
-  transition: width 0.4s ease;
-}
+.pbar { height: 2px; background: var(--border); border-radius: 1px; overflow: hidden; }
+.pfill { height: 100%; background: var(--accent); border-radius: 1px; transition: width 0.4s ease; }
 
 .job-err {
-  font-size: 11px;
-  color: var(--red);
+  font-size: 11px; color: var(--danger-text);
   margin-top: 6px;
-  font-family: 'Geist Mono', monospace;
-  opacity: 0.8;
+  font-family: "JetBrains Mono", monospace;
 }
 
-/* ── Results Table ────────────────────────────────────────────────────── */
-.rtable {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 12px;
-}
+/* ── Results Table ─────────────────────────────────────────────────────── */
+.table-wrap { overflow-x: auto; }
+
+.rtable { width: 100%; border-collapse: collapse; font-size: 12px; }
 
 .rtable th {
   text-align: left;
-  padding: 9px 16px;
-  color: var(--text3);
-  font-size: 10px;
-  font-weight: 700;
+  padding: 10px 16px;
+  color: var(--text-muted);
+  font-size: 11px; font-weight: 500;
   text-transform: uppercase;
-  letter-spacing: 0.07em;
+  letter-spacing: 0.05em;
   border-bottom: 1px solid var(--border);
-  background: var(--surface);
-  position: sticky;
-  top: 0;
-  z-index: 1;
+  background: var(--bg-surface);
+  position: sticky; top: 0; z-index: 1;
+  white-space: nowrap;
 }
 
+.rtable th.r, .rtable td.r { text-align: right; }
+
 .rtable td {
-  padding: 10px 16px;
-  border-bottom: 1px solid var(--border);
-  font-family: 'Geist Mono', monospace;
+  padding: 0 16px;
+  height: 44px;
+  border-bottom: 1px solid var(--border-subtle);
+  font-family: "JetBrains Mono", monospace;
+  font-feature-settings: "tnum";
+  vertical-align: middle;
 }
 
 .rtable tr:last-child td { border-bottom: none; }
-.rtable tr:hover td { background: var(--surface2); }
+.rtable tr:hover td { background: var(--bg-hover); }
+.rtable .strat-col { font-family: Inter, sans-serif; font-weight: 500; color: var(--text-primary); font-feature-settings: normal; }
 
-.rtable .strat-col {
-  font-family: 'Geist', sans-serif;
-  font-weight: 500;
-  color: var(--text);
+.c-success { color: var(--success); }
+.c-warning { color: var(--warning); }
+.c-danger  { color: var(--danger); }
+.c-accent  { color: var(--accent); }
+.c-muted   { color: var(--text-muted); }
+
+/* ── Badge ─────────────────────────────────────────────────────────────── */
+.badge {
+  display: inline-flex; align-items: center;
+  font-size: 11px; font-weight: 500;
+  padding: 2px 8px;
+  border-radius: var(--r-pill);
+  letter-spacing: 0.02em;
+  white-space: nowrap;
 }
 
-.c-green  { color: var(--green); }
-.c-red    { color: var(--red); }
-.c-yellow { color: var(--yellow); }
-.c-blue   { color: var(--accent); }
-.c-muted  { color: var(--text2); }
+.badge-success { background: var(--success-bg); color: var(--success-text); }
+.badge-warning { background: var(--warning-bg); color: var(--warning-text); }
+.badge-danger  { background: var(--danger-bg);  color: var(--danger-text); }
+.badge-info    { background: var(--info-bg);    color: var(--info-text); }
+.badge-neutral { background: var(--neutral-bg); color: var(--neutral-text); }
+.badge-accent  { background: var(--accent-tint); color: var(--accent); }
 
-/* ── Badge / Tag ──────────────────────────────────────────────────────── */
-.tag {
-  display: inline-flex;
-  align-items: center;
-  font-size: 10px;
-  font-weight: 700;
-  padding: 2px 7px;
-  border-radius: 20px;
-  letter-spacing: 0.03em;
-}
-
-.tag-blue   { background: var(--accent-bg); color: var(--accent); border: 1px solid #4f8ef720; }
-.tag-green  { background: var(--green-bg); color: var(--green); border: 1px solid #34d39920; }
-.tag-red    { background: var(--red-bg); color: var(--red); border: 1px solid #f8717120; }
-.tag-yellow { background: var(--yellow-bg); color: var(--yellow); border: 1px solid #fbbf2420; }
-.tag-gray   { background: var(--surface2); color: var(--text2); border: 1px solid var(--border2); }
-
-/* ── Empty State ──────────────────────────────────────────────────────── */
+/* ── Empty State ───────────────────────────────────────────────────────── */
 .empty {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 40px 24px;
-  color: var(--text3);
-  text-align: center;
-  gap: 8px;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  padding: 48px 24px;
+  color: var(--text-muted);
+  text-align: center; gap: 8px;
 }
 
-.empty-icon { font-size: 24px; margin-bottom: 2px; }
-.empty-title { font-size: 13px; font-weight: 500; color: var(--text2); }
-.empty-sub { font-size: 12px; }
+.empty svg { width: 32px; height: 32px; opacity: 0.4; margin-bottom: 4px; }
+.empty-title { font-size: 13px; font-weight: 500; color: var(--text-secondary); }
+.empty-sub { font-size: 12px; color: var(--text-muted); max-width: 240px; }
 
-/* ── Spinner ──────────────────────────────────────────────────────────── */
+/* ── Skeleton rows ─────────────────────────────────────────────────────── */
+.skel-row { padding: 12px 16px; border-bottom: 1px solid var(--border-subtle); display: flex; align-items: center; gap: 12px; }
+.skel-row:last-child { border-bottom: none; }
+.skel-line { height: 12px; border-radius: var(--r-xs); }
+.skel-stat { height: 26px; border-radius: var(--r-sm); margin-bottom: 8px; }
+
+/* ── Spinner ───────────────────────────────────────────────────────────── */
 .spinner {
-  width: 16px; height: 16px;
-  border: 2px solid var(--border2);
+  width: 15px; height: 15px;
+  border: 2px solid var(--border);
   border-top-color: var(--accent);
   border-radius: 50%;
   animation: spin 0.7s linear infinite;
@@ -622,207 +662,201 @@ nav {
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 
-/* ── Connect Page ─────────────────────────────────────────────────────── */
-.connect-wrap { max-width: 760px; }
+/* ── Connect Page ──────────────────────────────────────────────────────── */
+.connect-wrap { max-width: 800px; }
 
-.connect-wrap h2 {
-  font-size: 20px;
-  font-weight: 700;
-  letter-spacing: -0.03em;
-  margin-bottom: 4px;
-}
-
-.connect-wrap .page-sub {
-  font-size: 13px;
-  color: var(--text2);
-  margin-bottom: 28px;
-}
+.page-header { margin-bottom: 28px; }
+.page-header h2 { font-size: 20px; font-weight: 600; letter-spacing: -0.02em; margin-bottom: 4px; }
+.page-header p { font-size: 13px; color: var(--text-secondary); }
 
 .info-banner {
-  background: var(--accent-bg);
-  border: 1px solid #4f8ef725;
-  border-radius: var(--radius-lg);
+  background: var(--accent-tint);
+  border: 1px solid rgba(59,130,246,0.2);
+  border-radius: var(--r-md);
   padding: 14px 16px;
   margin-bottom: 24px;
-  font-size: 12px;
-  color: var(--text2);
+  font-size: 13px;
+  color: var(--text-secondary);
   line-height: 1.8;
 }
 
-.info-banner strong { color: var(--text); font-weight: 600; }
+.info-banner strong { color: var(--text-primary); font-weight: 500; }
+.info-banner code { font-family: "JetBrains Mono", monospace; color: var(--accent); font-size: 12px; }
 
-.info-banner code {
-  font-family: 'Geist Mono', monospace;
-  color: var(--accent);
-  font-size: 11px;
-}
+.step-block { margin-bottom: 28px; }
 
-.step-block { margin-bottom: 24px; }
+.step-label { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
 
-.step-label {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 10px;
-}
-
-.step-num-badge {
+.step-num {
   width: 22px; height: 22px;
   background: var(--accent);
   border-radius: 50%;
   display: flex; align-items: center; justify-content: center;
-  font-size: 11px;
-  font-weight: 700;
-  color: #fff;
-  flex-shrink: 0;
+  font-size: 11px; font-weight: 600;
+  color: var(--on-accent); flex-shrink: 0;
 }
 
-.step-label h3 {
-  font-size: 14px;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-}
+.step-label h3 { font-size: 14px; font-weight: 600; letter-spacing: -0.01em; }
 
 .step-block p {
-  font-size: 12px;
-  color: var(--text2);
-  margin-bottom: 10px;
-  margin-left: 32px;
+  font-size: 13px; color: var(--text-secondary);
+  margin-bottom: 10px; margin-left: 32px; line-height: 1.6;
 }
 
 .code-block {
-  background: var(--bg);
-  border: 1px solid var(--border2);
-  border-radius: var(--radius-lg);
+  background: var(--bg-canvas);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
   overflow: hidden;
 }
 
 .code-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+  display: flex; align-items: center; justify-content: space-between;
   padding: 8px 14px;
   border-bottom: 1px solid var(--border);
-  background: var(--surface2);
+  background: var(--bg-elevated);
 }
 
-.code-lang {
-  font-size: 10px;
-  font-weight: 700;
-  color: var(--text3);
-  text-transform: uppercase;
-  letter-spacing: 0.07em;
-}
+.code-lang { font-size: 10px; font-weight: 500; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.07em; }
 
 .btn-copy {
   background: none;
-  border: 1px solid var(--border2);
-  border-radius: 5px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-xs);
   padding: 2px 8px;
-  color: var(--text2);
-  font-size: 10px;
-  font-weight: 600;
+  color: var(--text-secondary);
+  font-size: 10px; font-weight: 500;
   font-family: inherit;
   cursor: pointer;
-  transition: all 0.15s;
+  transition: border-color 0.15s, color 0.15s;
 }
 
 .btn-copy:hover { border-color: var(--accent); color: var(--accent); }
-.btn-copy.copied { border-color: var(--green); color: var(--green); }
+.btn-copy.copied { border-color: var(--success-text); color: var(--success-text); }
 
 pre {
   padding: 14px 16px;
-  font-family: 'Geist Mono', monospace;
-  font-size: 12px;
-  line-height: 1.7;
-  color: var(--text);
-  overflow-x: auto;
-  white-space: pre;
+  font-family: "JetBrains Mono", monospace;
+  font-size: 12px; line-height: 1.7;
+  color: var(--text-primary);
+  overflow-x: auto; white-space: pre;
 }
 
-pre .c { color: var(--text3); }
-pre .k { color: var(--accent); }
-pre .s { color: var(--green); }
-pre .n { color: var(--yellow); }
-
-.tools-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
-  margin-left: 32px;
-}
-
-.tools-panel {
-  background: var(--bg);
-  border: 1px solid var(--border2);
-  border-radius: var(--radius-lg);
-  overflow: hidden;
-}
-
-.tools-panel-header {
-  padding: 10px 14px;
-  background: var(--surface2);
-  border-bottom: 1px solid var(--border);
-  font-size: 11px;
-  font-weight: 700;
-  color: var(--text2);
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.tool-item {
-  padding: 8px 14px;
-  border-bottom: 1px solid var(--border);
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.tool-item:last-child { border-bottom: none; }
-.tool-name { font-family: 'Geist Mono', monospace; font-size: 11px; color: var(--accent); font-weight: 500; }
-.tool-desc { font-size: 11px; color: var(--text2); }
-
-/* ── Token display ────────────────────────────────────────────────────── */
+/* Token row */
 .token-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  background: var(--bg);
-  border: 1px solid var(--border2);
-  border-radius: var(--radius);
+  display: flex; align-items: center; gap: 10px;
+  background: var(--bg-canvas);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
   padding: 10px 14px;
   margin-bottom: 20px;
 }
 
 .token-val {
   flex: 1;
-  font-family: 'Geist Mono', monospace;
-  font-size: 12px;
+  font-family: "JetBrains Mono", monospace;
+  font-size: 12px; font-feature-settings: "tnum";
   color: var(--accent);
   word-break: break-all;
+  transition: filter 0.2s;
 }
 
-/* ── Responsive ───────────────────────────────────────────────────────── */
+.token-val.blurred { filter: blur(5px); user-select: none; }
+
+.tools-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-left: 32px; }
+
+.tools-panel {
+  background: var(--bg-canvas);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  overflow: hidden;
+}
+
+.tools-panel-header {
+  padding: 10px 14px;
+  background: var(--bg-elevated);
+  border-bottom: 1px solid var(--border);
+  font-size: 11px; font-weight: 500;
+  color: var(--text-secondary);
+  display: flex; align-items: center; gap: 6px;
+}
+
+.tool-item {
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--border-subtle);
+  display: flex; flex-direction: column; gap: 2px;
+}
+
+.tool-item:last-child { border-bottom: none; }
+.tool-name { font-family: "JetBrains Mono", monospace; font-size: 11px; color: var(--accent); font-weight: 500; }
+.tool-desc { font-size: 11px; color: var(--text-muted); }
+
+/* ── Agent Tabs ────────────────────────────────────────────────────────── */
+.agent-tab {
+  display: flex; align-items: center; gap: 7px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  padding: 8px 16px;
+  font-size: 13px; font-weight: 500;
+  font-family: inherit;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.agent-tab:hover { border-color: var(--border-strong); color: var(--text-primary); }
+
+.agent-tab.active {
+  background: var(--accent-tint);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* ── Mobile overlay ────────────────────────────────────────────────────── */
+.sidebar-overlay {
+  display: none;
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.5);
+  z-index: 9;
+}
+
+/* ── Responsive ────────────────────────────────────────────────────────── */
 @media (max-width: 1024px) {
   .stat-grid { grid-template-columns: repeat(2, 1fr); }
 }
 
 @media (max-width: 768px) {
-  :root { --sidebar-w: 0px; }
-  aside { display: none; }
+  .stat-grid { grid-template-columns: 1fr; }
   .two-col { grid-template-columns: 1fr; }
   .tools-grid { grid-template-columns: 1fr; }
+  aside {
+    position: fixed; top: 0; left: 0; height: 100vh;
+    transform: translateX(-100%);
+    transition: transform 0.25s ease, width 0.2s ease;
+    z-index: 10; width: var(--sidebar-w) !important;
+  }
+  aside.mobile-open { transform: translateX(0); }
+  .sidebar-overlay { display: block; opacity: 0; pointer-events: none; transition: opacity 0.25s; }
+  .sidebar-overlay.visible { opacity: 1; pointer-events: all; }
+  .topbar { padding: 0 16px; }
+  .page { padding: 16px; }
+}
+
+@media (max-width: 640px) {
+  .user-badge .user-name { display: none; }
 }
 </style>
 </head>
 <body>
 
-<!-- ══ LOGIN ══════════════════════════════════════════════════════════════ -->
+<!-- ══ LOGIN ═════════════════════════════════════════════════════════════ -->
 <div id="login-screen">
   <div class="login-wrap">
     <div class="login-logo">
-      <div class="login-logo-icon">📊</div>
+      <div class="login-logo-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+      </div>
       <div class="login-logo-text">
         <h1>Freqtrade MCP</h1>
         <p>Backtest &amp; Strategy Platform</p>
@@ -834,13 +868,13 @@ pre .n { color: var(--yellow); }
       <p class="login-sub">Masuk untuk mengakses dashboard</p>
 
       <div class="field">
-        <label>Username</label>
-        <input type="text" id="inp-user" placeholder="admin" autocomplete="username" />
+        <label for="inp-user">Username</label>
+        <input type="text" id="inp-user" placeholder="admin" autocomplete="username">
       </div>
 
       <div class="field">
-        <label>Password</label>
-        <input type="password" id="inp-pass" placeholder="••••••••••" autocomplete="current-password" />
+        <label for="inp-pass">Password</label>
+        <input type="password" id="inp-pass" placeholder="••••••••••" autocomplete="current-password">
       </div>
 
       <button class="btn-primary" id="login-btn" onclick="doLogin()">
@@ -848,89 +882,154 @@ pre .n { color: var(--yellow); }
       </button>
 
       <div class="login-error" id="login-err">
-        <span>⚠</span>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
         <span id="login-err-msg">Username atau password salah</span>
       </div>
     </div>
   </div>
 </div>
 
-<!-- ══ APP ════════════════════════════════════════════════════════════════ -->
+<!-- ══ APP ═══════════════════════════════════════════════════════════════ -->
 <div id="app">
   <div class="layout">
 
+    <!-- Overlay (mobile) -->
+    <div class="sidebar-overlay" id="sidebar-overlay" onclick="closeMobileSidebar()"></div>
+
     <!-- Sidebar -->
-    <aside>
+    <aside id="sidebar">
       <div class="sidebar-header">
-        <div class="sidebar-logo-icon">📊</div>
-        <div>
-          <div class="sidebar-logo-text">Freqtrade MCP</div>
-          <div class="sidebar-logo-sub">trade.dennyardi.com</div>
+        <div class="sidebar-brand">
+          <div class="sidebar-logo-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+          </div>
+          <div class="sidebar-logo-text">
+            <div class="name">Freqtrade MCP</div>
+            <div class="sub">trade.dennyardi.com</div>
+          </div>
         </div>
+        <button class="btn-collapse" onclick="toggleSidebar()" title="Toggle sidebar">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+        </button>
       </div>
 
       <nav>
         <div class="nav-section">Menu</div>
-        <div class="nav-item active" onclick="switchPage('dashboard', this)">
-          <span class="nav-icon">⬛</span> Overview
+        <div class="nav-item active" onclick="switchPage('dashboard', this)" title="Overview">
+          <span class="nav-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+          </span>
+          <span class="nav-label">Overview</span>
         </div>
-        <div class="nav-item" onclick="switchPage('strategies', this)">
-          <span class="nav-icon">🤖</span> Strategies
+        <div class="nav-item" onclick="switchPage('strategies', this)" title="Strategies">
+          <span class="nav-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+          </span>
+          <span class="nav-label">Strategies</span>
         </div>
-        <div class="nav-item" onclick="switchPage('jobs', this)">
-          <span class="nav-icon">⚡</span> Jobs
+        <div class="nav-item" onclick="switchPage('jobs', this)" title="Jobs">
+          <span class="nav-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          </span>
+          <span class="nav-label">Jobs</span>
         </div>
-        <div class="nav-item" onclick="switchPage('results', this)">
-          <span class="nav-icon">📈</span> Results
+        <div class="nav-item" onclick="switchPage('results', this)" title="Results">
+          <span class="nav-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+          </span>
+          <span class="nav-label">Results</span>
         </div>
 
         <div class="nav-section">System</div>
-        <div class="nav-item" onclick="switchPage('connect', this)">
-          <span class="nav-icon">🔌</span> Koneksi Hermes
+        <div class="nav-item" onclick="switchPage('connect', this)" title="Koneksi Hermes">
+          <span class="nav-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+          </span>
+          <span class="nav-label">Koneksi Hermes</span>
         </div>
       </nav>
 
       <div class="sidebar-footer">
-        <div class="server-status-pill">
+        <div class="server-status">
           <div class="status-dot online" id="sidebar-dot"></div>
           <div class="status-info">
             <div class="status-name" id="sidebar-status">Online</div>
-            <div class="status-sub" id="sidebar-refresh">—</div>
+            <div class="status-sub" id="sidebar-sub">freqtrade-mcp v1.0</div>
           </div>
         </div>
-        <button class="btn-logout" onclick="doLogout()">↩ Logout</button>
+        <button class="btn-logout" onclick="doLogout()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+          <span>Logout</span>
+        </button>
       </div>
     </aside>
 
     <!-- Main area -->
     <div class="main-area">
+      <!-- Topbar -->
       <div class="topbar">
-        <div class="topbar-title" id="topbar-title">Overview</div>
+        <div class="topbar-left">
+          <!-- Mobile hamburger -->
+          <button class="btn-icon" id="btn-hamburger" onclick="openMobileSidebar()" style="display:none" title="Menu">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+          </button>
+          <div class="breadcrumb">
+            <span>Freqtrade MCP</span>
+            <span class="breadcrumb-sep">/</span>
+            <span class="breadcrumb-current" id="topbar-title">Overview</span>
+          </div>
+        </div>
         <div class="topbar-right">
-          <span class="refresh-txt" id="refresh-txt"></span>
-          <button class="btn-refresh" onclick="refreshAll()">↻ Refresh</button>
+          <span class="countdown-txt" id="countdown-txt"></span>
+          <button class="btn-icon" onclick="refreshAll()" title="Refresh">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+          </button>
+          <button class="btn-icon" id="theme-toggle" onclick="toggleTheme()" title="Toggle theme">
+            <svg id="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+            <svg id="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+          </button>
+          <div class="user-badge">
+            <div class="user-avatar" id="user-avatar">A</div>
+            <span class="user-name" id="user-name">admin</span>
+          </div>
         </div>
       </div>
 
-      <!-- ── PAGE: Dashboard / Overview ───────────────────────────────── -->
+      <!-- ── PAGE: Overview ─────────────────────────────────────────────── -->
       <div class="page active" id="page-dashboard">
 
         <div class="stat-grid">
           <div class="stat-card">
-            <div class="stat-label">🤖 Strategies</div>
-            <div class="stat-num blue" id="s-strategies">—</div>
+            <div class="stat-top">
+              <div class="stat-label">Strategies</div>
+              <div class="stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg></div>
+            </div>
+            <div class="stat-num c-accent" id="s-strategies">—</div>
+            <div class="stat-delta"><span class="badge badge-neutral">Total</span></div>
           </div>
           <div class="stat-card">
-            <div class="stat-label">⚡ Jobs Aktif</div>
-            <div class="stat-num yellow" id="s-active">—</div>
+            <div class="stat-top">
+              <div class="stat-label">Jobs Aktif</div>
+              <div class="stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></div>
+            </div>
+            <div class="stat-num c-warning" id="s-active">—</div>
+            <div class="stat-delta"><span class="badge badge-warning">Running</span></div>
           </div>
           <div class="stat-card">
-            <div class="stat-label">✅ Selesai</div>
-            <div class="stat-num green" id="s-done">—</div>
+            <div class="stat-top">
+              <div class="stat-label">Selesai</div>
+              <div class="stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg></div>
+            </div>
+            <div class="stat-num c-success" id="s-done">—</div>
+            <div class="stat-delta"><span class="badge badge-success">Completed</span></div>
           </div>
           <div class="stat-card">
-            <div class="stat-label">❌ Gagal</div>
-            <div class="stat-num red" id="s-failed">—</div>
+            <div class="stat-top">
+              <div class="stat-label">Gagal</div>
+              <div class="stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg></div>
+            </div>
+            <div class="stat-num c-danger" id="s-failed">—</div>
+            <div class="stat-delta"><span class="badge badge-danger">Failed</span></div>
           </div>
         </div>
 
@@ -938,21 +1037,23 @@ pre .n { color: var(--yellow); }
           <div class="panel">
             <div class="panel-header">
               <span class="panel-title">Recent Strategies</span>
-              <span class="tag tag-blue" id="badge-strats">0</span>
+              <span class="badge badge-accent" id="badge-strats">0</span>
             </div>
             <div class="panel-body" id="overview-strats">
-              <div class="empty"><span class="spinner"></span></div>
+              <div class="skel-row"><div class="skeleton skel-line" style="width:60%"></div><div class="skeleton skel-line" style="width:15%;margin-left:auto"></div></div>
+              <div class="skel-row"><div class="skeleton skel-line" style="width:45%"></div><div class="skeleton skel-line" style="width:15%;margin-left:auto"></div></div>
+              <div class="skel-row"><div class="skeleton skel-line" style="width:55%"></div><div class="skeleton skel-line" style="width:15%;margin-left:auto"></div></div>
             </div>
           </div>
 
           <div class="panel">
             <div class="panel-header">
               <span class="panel-title">Active Jobs</span>
-              <span class="tag tag-yellow" id="badge-jobs">0</span>
+              <span class="badge badge-warning" id="badge-jobs">0</span>
             </div>
             <div class="panel-body" id="overview-jobs">
               <div class="empty">
-                <div class="empty-icon">💤</div>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>
                 <div class="empty-title">Tidak ada job aktif</div>
                 <div class="empty-sub">Jobs akan muncul saat Hermes menjalankan backtest</div>
               </div>
@@ -963,11 +1064,11 @@ pre .n { color: var(--yellow); }
         <div class="panel">
           <div class="panel-header">
             <span class="panel-title">Latest Results</span>
-            <span class="tag tag-green" id="badge-results">0</span>
+            <span class="badge badge-success" id="badge-results">0</span>
           </div>
           <div class="panel-body" id="overview-results">
             <div class="empty">
-              <div class="empty-icon">📊</div>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
               <div class="empty-title">Belum ada hasil backtest</div>
               <div class="empty-sub">Hasil akan muncul setelah job backtest selesai</div>
             </div>
@@ -976,182 +1077,289 @@ pre .n { color: var(--yellow); }
 
       </div>
 
-      <!-- ── PAGE: Strategies ──────────────────────────────────────────── -->
+      <!-- ── PAGE: Strategies ───────────────────────────────────────────── -->
       <div class="page" id="page-strategies">
         <div class="panel">
           <div class="panel-header">
             <span class="panel-title">All Strategies</span>
-            <span class="tag tag-blue" id="badge-strats2">0</span>
+            <span class="badge badge-accent" id="badge-strats2">0</span>
           </div>
           <div class="panel-body" id="all-strats-list">
-            <div class="empty"><span class="spinner"></span></div>
+            <div class="skel-row"><div class="skeleton skel-line" style="width:55%"></div></div>
+            <div class="skel-row"><div class="skeleton skel-line" style="width:40%"></div></div>
+            <div class="skel-row"><div class="skeleton skel-line" style="width:65%"></div></div>
           </div>
         </div>
       </div>
 
-      <!-- ── PAGE: Jobs ────────────────────────────────────────────────── -->
+      <!-- ── PAGE: Jobs ─────────────────────────────────────────────────── -->
       <div class="page" id="page-jobs">
         <div class="panel">
           <div class="panel-header">
             <span class="panel-title">All Jobs (sesi ini)</span>
-            <span class="tag tag-blue" id="badge-jobs2">0</span>
+            <span class="badge badge-accent" id="badge-jobs2">0</span>
           </div>
           <div class="panel-body" id="all-jobs-list">
             <div class="empty">
-              <div class="empty-icon">💤</div>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>
               <div class="empty-title">Belum ada job</div>
+              <div class="empty-sub">Job backtest dan hyperopt akan muncul di sini</div>
             </div>
           </div>
         </div>
       </div>
 
-      <!-- ── PAGE: Results ─────────────────────────────────────────────── -->
+      <!-- ── PAGE: Results ──────────────────────────────────────────────── -->
       <div class="page" id="page-results">
         <div class="panel">
           <div class="panel-header">
             <span class="panel-title">Backtest Results (sesi ini)</span>
-            <span class="tag tag-green" id="badge-results2">0</span>
+            <span class="badge badge-success" id="badge-results2">0</span>
           </div>
           <div class="panel-body" id="all-results-table">
             <div class="empty">
-              <div class="empty-icon">📈</div>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
               <div class="empty-title">Belum ada hasil backtest</div>
+              <div class="empty-sub">Selesaikan backtest job terlebih dahulu</div>
             </div>
           </div>
         </div>
       </div>
 
-      <!-- ── PAGE: Connect ─────────────────────────────────────────────── -->
+      <!-- ── PAGE: Connect ──────────────────────────────────────────────── -->
       <div class="page" id="page-connect">
         <div class="connect-wrap">
-          <h2>Koneksi Hermes Agent</h2>
-          <p class="page-sub">Panduan menghubungkan Hermes Agent via Telegram ke Freqtrade MCP Server ini.</p>
+          <div class="page-header">
+            <h2>Koneksi Hermes Agent</h2>
+            <p>Copy YAML di bawah lalu kirim langsung ke Hermes via chat Telegram untuk menghubungkan kedua agent.</p>
+          </div>
 
           <div class="info-banner">
             <strong>MCP SSE Endpoint:</strong> <code>https://trade.dennyardi.com/sse</code><br>
             <strong>Protocol:</strong> MCP v2.x over HTTP/SSE &nbsp;·&nbsp;
-            <strong>Auth:</strong> Bearer Token (internal)
+            <strong>Auth:</strong> 2 Bearer Token terpisah — 1 per agent &nbsp;·&nbsp;
+            <strong>Enforcement:</strong> Server-side per token
           </div>
 
-          <!-- Token -->
-          <div class="step-block">
-            <div class="step-label">
-              <div class="step-num-badge">🔑</div>
-              <h3>Bearer Token (untuk Hermes config)</h3>
-            </div>
-            <p>Token ini digunakan Hermes Agent untuk autentikasi ke MCP Server. Simpan dengan aman.</p>
-            <div class="token-row">
-              <span class="token-val" id="token-display">ft-mcp-onam14mibilt1b99wkpr</span>
-              <button class="btn-copy" onclick="copyText('token-display', this)">Copy</button>
-            </div>
+          <!-- Agent tabs -->
+          <div style="display:flex;gap:8px;margin-bottom:20px">
+            <button class="agent-tab active" id="tab-trade" onclick="switchAgent('trade')">
+              🤖 Agent Pembuat Strategi
+            </button>
+            <button class="agent-tab" id="tab-eval" onclick="switchAgent('eval')">
+              📊 Agent Evaluasi
+            </button>
           </div>
 
-          <!-- Step 1 -->
-          <div class="step-block">
-            <div class="step-label">
-              <div class="step-num-badge">1</div>
-              <h3>Konfigurasi via Hermes CLI / Telegram</h3>
-            </div>
-            <p>Kirim perintah ini ke Hermes di Telegram, atau jalankan via CLI di setiap VPS Hermes:</p>
-            <div class="code-block">
-              <div class="code-head">
-                <span class="code-lang">bash</span>
-                <button class="btn-copy" onclick="copyText('cmd1', this)">Copy</button>
+          <!-- ── AGENT TRADE ── -->
+          <div id="agent-trade">
+
+            <!-- Token trade -->
+            <div class="step-block">
+              <div class="step-label">
+                <div class="step-num">🔑</div>
+                <h3>Bearer Token — Agent Pembuat Strategi</h3>
               </div>
-              <pre id="cmd1">hermes config set mcp.servers.freqtrade.type sse
-hermes config set mcp.servers.freqtrade.url https://trade.dennyardi.com/sse
-hermes config set mcp.servers.freqtrade.headers.Authorization "Bearer ft-mcp-onam14mibilt1b99wkpr"</pre>
-            </div>
-          </div>
-
-          <!-- Step 2 -->
-          <div class="step-block">
-            <div class="step-label">
-              <div class="step-num-badge">2</div>
-              <h3>Atau edit config.yaml langsung</h3>
-            </div>
-            <p>Edit <code style="font-family:monospace;color:var(--accent);font-size:11px">~/.hermes/config.yaml</code> dan tambahkan:</p>
-            <div class="code-block">
-              <div class="code-head">
-                <span class="code-lang">yaml</span>
-                <button class="btn-copy" onclick="copyText('cmd2', this)">Copy</button>
+              <p>Token ini memberi akses ke semua 12 tools (read + write). Khusus untuk <code style="font-family:monospace;color:var(--accent);font-size:12px">agentfreqtrade</code>.</p>
+              <div class="token-row">
+                <span class="token-val blurred" id="token-trade">ft-mcp-onam14mibilt1b99wkpr</span>
+                <button class="btn-icon" onclick="toggleBlur('token-trade')" title="Tampilkan token">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                </button>
+                <button class="btn-copy" onclick="copyText('token-trade', this)">Copy</button>
               </div>
-              <pre id="cmd2">mcp:
+            </div>
+
+            <!-- Step 1 trade: kirim YAML ke Telegram -->
+            <div class="step-block">
+              <div class="step-label">
+                <div class="step-num">1</div>
+                <h3>Kirim YAML ini ke Hermes via Telegram</h3>
+              </div>
+              <p>Copy seluruh blok YAML di bawah, lalu paste dan kirim ke chat <strong>agentfreqtrade</strong> di Telegram. Hermes akan otomatis membaca dan menerapkan konfigurasi MCP.</p>
+              <div class="code-block">
+                <div class="code-head">
+                  <span class="code-lang">yaml — paste ke Telegram</span>
+                  <button class="btn-copy" onclick="copyText('yaml-trade', this)">Copy</button>
+                </div>
+                <pre id="yaml-trade">mcp:
   servers:
     freqtrade:
       type: sse
       url: https://trade.dennyardi.com/sse
       headers:
         Authorization: "Bearer ft-mcp-onam14mibilt1b99wkpr"</pre>
-            </div>
-          </div>
-
-          <!-- Step 3: Verifikasi -->
-          <div class="step-block">
-            <div class="step-label">
-              <div class="step-num-badge">3</div>
-              <h3>Verifikasi koneksi</h3>
-            </div>
-            <p>Restart Hermes, lalu cek tools tersedia:</p>
-            <div class="code-block">
-              <div class="code-head">
-                <span class="code-lang">bash</span>
-                <button class="btn-copy" onclick="copyText('cmd3', this)">Copy</button>
               </div>
-              <pre id="cmd3">hermes tools list | grep freqtrade</pre>
             </div>
-          </div>
 
-          <!-- Step 4: Contoh chat Telegram -->
-          <div class="step-block">
-            <div class="step-label">
-              <div class="step-num-badge">4</div>
-              <h3>Contoh perintah via Telegram ke Hermes</h3>
+            <!-- Step 2 trade: verifikasi -->
+            <div class="step-block">
+              <div class="step-label">
+                <div class="step-num">2</div>
+                <h3>Verifikasi di Telegram</h3>
+              </div>
+              <p>Setelah YAML dikirim, kirim pesan ini ke Hermes untuk memastikan koneksi berhasil:</p>
+              <div class="code-block">
+                <div class="code-head">
+                  <span class="code-lang">Telegram → agentfreqtrade</span>
+                  <button class="btn-copy" onclick="copyText('verify-trade', this)">Copy</button>
+                </div>
+                <pre id="verify-trade">tampilkan daftar strategi yang tersedia di freqtrade MCP</pre>
+              </div>
             </div>
-            <p>Setelah terhubung, kamu bisa chat natural ke Hermes di Telegram:</p>
-            <div class="code-block">
-              <div class="code-head"><span class="code-lang">Telegram → Hermes</span></div>
-              <pre>Download data BTC/USDT timeframe 1h untuk 180 hari terakhir
 
-Buat strategi RSI crossover + MACD confirmation untuk BTC/USDT
+            <!-- Step 3 trade: contoh chat -->
+            <div class="step-block">
+              <div class="step-label">
+                <div class="step-num">3</div>
+                <h3>Contoh perintah via Telegram</h3>
+              </div>
+              <p>Setelah terhubung, kamu bisa chat natural ke <strong>agentfreqtrade</strong>:</p>
+              <div class="code-block">
+                <div class="code-head"><span class="code-lang">Telegram → agentfreqtrade</span></div>
+                <pre>download data BTC/USDT timeframe 1h untuk 180 hari terakhir
 
-Backtest strategi RSIStrategy untuk BTC/USDT
+buat strategi RSI crossover + MACD confirmation untuk BTC/USDT
+
+backtest strategi RSIStrategy untuk BTC/USDT
 timeframe 1h, periode 1 Januari - 1 Desember 2024
 
-Jalankan hyperopt RSIStrategy, 100 epochs,
+jalankan hyperopt RSIStrategy, 100 epochs,
 optimasi roi, stoploss dan trailing
 
-Bandingkan hasil job abc123 dengan def456</pre>
-            </div>
-          </div>
-
-          <!-- Tools list -->
-          <div class="step-block">
-            <div class="step-label">
-              <div class="step-num-badge">★</div>
-              <h3>12 Tools yang Tersedia</h3>
-            </div>
-            <div class="tools-grid">
-              <div class="tools-panel">
-                <div class="tools-panel-header">🤖 Agent Pembuat Strategi</div>
-                <div class="tool-item"><span class="tool-name">tool_create_strategy</span><span class="tool-desc">Generate file strategi dari deskripsi</span></div>
-                <div class="tool-item"><span class="tool-name">tool_validate_strategy</span><span class="tool-desc">Validasi strategi sebelum backtest</span></div>
-                <div class="tool-item"><span class="tool-name">tool_download_data</span><span class="tool-desc">Download data historis Binance</span></div>
-                <div class="tool-item"><span class="tool-name">tool_run_backtest</span><span class="tool-desc">Jalankan backtest (async)</span></div>
-                <div class="tool-item"><span class="tool-name">tool_run_hyperopt</span><span class="tool-desc">Optimasi parameter (async)</span></div>
-                <div class="tool-item"><span class="tool-name">tool_get_job_status</span><span class="tool-desc">Cek status job</span></div>
-                <div class="tool-item"><span class="tool-name">tool_cancel_job</span><span class="tool-desc">Batalkan job yang berjalan</span></div>
+batalkan job abc12345</pre>
               </div>
-              <div class="tools-panel">
-                <div class="tools-panel-header">📊 Agent Evaluasi (read-only)</div>
+            </div>
+
+            <!-- Tools list trade -->
+            <div class="step-block">
+              <div class="step-label">
+                <div class="step-num">★</div>
+                <h3>12 Tools — Agent Pembuat Strategi</h3>
+              </div>
+              <div class="tools-grid" style="margin-left:0">
+                <div class="tools-panel">
+                  <div class="tools-panel-header">✍️ Write Tools (eksklusif)</div>
+                  <div class="tool-item"><span class="tool-name">tool_create_strategy</span><span class="tool-desc">Generate file strategi dari deskripsi</span></div>
+                  <div class="tool-item"><span class="tool-name">tool_validate_strategy</span><span class="tool-desc">Validasi strategi sebelum backtest</span></div>
+                  <div class="tool-item"><span class="tool-name">tool_download_data</span><span class="tool-desc">Download data historis Binance</span></div>
+                  <div class="tool-item"><span class="tool-name">tool_run_backtest</span><span class="tool-desc">Jalankan backtest (async)</span></div>
+                  <div class="tool-item"><span class="tool-name">tool_run_hyperopt</span><span class="tool-desc">Optimasi parameter (async)</span></div>
+                  <div class="tool-item"><span class="tool-name">tool_cancel_job</span><span class="tool-desc">Batalkan job yang berjalan</span></div>
+                </div>
+                <div class="tools-panel">
+                  <div class="tools-panel-header">📖 Read Tools (shared)</div>
+                  <div class="tool-item"><span class="tool-name">tool_get_job_status</span><span class="tool-desc">Cek status &amp; progress job</span></div>
+                  <div class="tool-item"><span class="tool-name">tool_list_strategies</span><span class="tool-desc">Daftar semua strategi</span></div>
+                  <div class="tool-item"><span class="tool-name">tool_get_backtest_results</span><span class="tool-desc">Ambil hasil backtest</span></div>
+                  <div class="tool-item"><span class="tool-name">tool_get_hyperopt_results</span><span class="tool-desc">Ambil hasil hyperopt terbaik</span></div>
+                  <div class="tool-item"><span class="tool-name">tool_get_performance_summary</span><span class="tool-desc">Analisis + verdict + rekomendasi</span></div>
+                  <div class="tool-item"><span class="tool-name">tool_compare_strategies</span><span class="tool-desc">Bandingkan beberapa strategi</span></div>
+                </div>
+              </div>
+            </div>
+
+          </div><!-- /agent-trade -->
+
+          <!-- ── AGENT EVAL ── -->
+          <div id="agent-eval" style="display:none">
+
+            <!-- Token eval -->
+            <div class="step-block">
+              <div class="step-label">
+                <div class="step-num">🔑</div>
+                <h3>Bearer Token — Agent Evaluasi</h3>
+              </div>
+              <p>Token ini hanya memberi akses ke 5 read-only tools. Khusus untuk <code style="font-family:monospace;color:var(--accent);font-size:12px">agentfreqeval</code>. Server akan menolak (403) jika coba akses write tools.</p>
+              <div class="token-row">
+                <span class="token-val blurred" id="token-eval">ft-eval-rj5gp8bpzckw12gy46rj</span>
+                <button class="btn-icon" onclick="toggleBlur('token-eval')" title="Tampilkan token">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                </button>
+                <button class="btn-copy" onclick="copyText('token-eval', this)">Copy</button>
+              </div>
+            </div>
+
+            <!-- Step 1 eval: kirim YAML ke Telegram -->
+            <div class="step-block">
+              <div class="step-label">
+                <div class="step-num">1</div>
+                <h3>Kirim YAML ini ke Hermes via Telegram</h3>
+              </div>
+              <p>Copy seluruh blok YAML di bawah, lalu paste dan kirim ke chat <strong>agentfreqeval</strong> di Telegram.</p>
+              <div class="code-block">
+                <div class="code-head">
+                  <span class="code-lang">yaml — paste ke Telegram</span>
+                  <button class="btn-copy" onclick="copyText('yaml-eval', this)">Copy</button>
+                </div>
+                <pre id="yaml-eval">mcp:
+  servers:
+    freqtrade:
+      type: sse
+      url: https://trade.dennyardi.com/sse
+      headers:
+        Authorization: "Bearer ft-eval-rj5gp8bpzckw12gy46rj"</pre>
+              </div>
+            </div>
+
+            <!-- Step 2 eval: verifikasi -->
+            <div class="step-block">
+              <div class="step-label">
+                <div class="step-num">2</div>
+                <h3>Verifikasi di Telegram</h3>
+              </div>
+              <p>Setelah YAML dikirim, kirim pesan ini untuk memastikan koneksi berhasil:</p>
+              <div class="code-block">
+                <div class="code-head">
+                  <span class="code-lang">Telegram → agentfreqeval</span>
+                  <button class="btn-copy" onclick="copyText('verify-eval', this)">Copy</button>
+                </div>
+                <pre id="verify-eval">tampilkan daftar strategi yang tersedia di freqtrade MCP</pre>
+              </div>
+            </div>
+
+            <!-- Step 3 eval: contoh chat -->
+            <div class="step-block">
+              <div class="step-label">
+                <div class="step-num">3</div>
+                <h3>Contoh perintah via Telegram</h3>
+              </div>
+              <p>Setelah terhubung, kamu bisa chat natural ke <strong>agentfreqeval</strong>:</p>
+              <div class="code-block">
+                <div class="code-head"><span class="code-lang">Telegram → agentfreqeval</span></div>
+                <pre>tampilkan semua strategi yang tersedia
+
+ambil hasil backtest job abc12345
+
+tampilkan parameter terbaik dari hyperopt job def67890
+
+analisis performa strategi dari job abc12345,
+berikan verdict dan rekomendasi
+
+bandingkan hasil backtest job abc12345 dan def67890</pre>
+              </div>
+            </div>
+
+            <!-- Tools list eval -->
+            <div class="step-block">
+              <div class="step-label">
+                <div class="step-num">★</div>
+                <h3>5 Tools — Agent Evaluasi (Read-Only)</h3>
+              </div>
+              <div class="tools-panel" style="max-width:420px">
+                <div class="tools-panel-header">📖 Read-Only Tools</div>
                 <div class="tool-item"><span class="tool-name">tool_list_strategies</span><span class="tool-desc">Daftar semua strategi</span></div>
                 <div class="tool-item"><span class="tool-name">tool_get_backtest_results</span><span class="tool-desc">Ambil hasil backtest</span></div>
                 <div class="tool-item"><span class="tool-name">tool_get_hyperopt_results</span><span class="tool-desc">Ambil hasil hyperopt terbaik</span></div>
                 <div class="tool-item"><span class="tool-name">tool_get_performance_summary</span><span class="tool-desc">Analisis + verdict + rekomendasi</span></div>
                 <div class="tool-item"><span class="tool-name">tool_compare_strategies</span><span class="tool-desc">Bandingkan beberapa strategi</span></div>
               </div>
+              <p style="margin-top:12px;margin-left:0;color:var(--danger-text);font-size:12px">
+                ⚠️ Token ini akan ditolak (HTTP 403) jika mencoba memanggil tool di luar daftar ini.
+              </p>
             </div>
-          </div>
+
+          </div><!-- /agent-eval -->
 
         </div>
       </div>
@@ -1161,15 +1369,61 @@ Bandingkan hasil job abc123 dengan def456</pre>
 </div><!-- /app -->
 
 <script>
-/* ── State ─────────────────────────────────────────────────── */
-let SESSION = null;    // { username, token }
-let jobsMap = {};
+/* ── State ──────────────────────────────────────────────────────────── */
+let SESSION   = null;
+let jobsMap   = {};
 let resultsList = [];
 let countdown = 15;
 let timer;
 let currentPage = 'dashboard';
 
-/* ── Auth ──────────────────────────────────────────────────── */
+/* ── Theme ──────────────────────────────────────────────────────────── */
+function applyTheme(dark) {
+  document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+  document.getElementById('icon-moon').style.display = dark ? 'block' : 'none';
+  document.getElementById('icon-sun').style.display  = dark ? 'none'  : 'block';
+  localStorage.setItem('ft_theme', dark ? 'dark' : 'light');
+}
+
+function toggleTheme() {
+  const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+  applyTheme(!isDark);
+}
+
+/* ── Sidebar ────────────────────────────────────────────────────────── */
+function toggleSidebar() {
+  const sb = document.getElementById('sidebar');
+  const collapsed = sb.classList.toggle('collapsed');
+  localStorage.setItem('ft_sidebar', collapsed ? '1' : '0');
+}
+
+function openMobileSidebar() {
+  document.getElementById('sidebar').classList.add('mobile-open');
+  document.getElementById('sidebar-overlay').classList.add('visible');
+}
+
+function closeMobileSidebar() {
+  document.getElementById('sidebar').classList.remove('mobile-open');
+  document.getElementById('sidebar-overlay').classList.remove('visible');
+}
+
+/* ── Token blur ─────────────────────────────────────────────────────── */
+function toggleBlur(elId) {
+  document.getElementById(elId).classList.toggle('blurred');
+}
+
+/* kept for backward compat */
+function toggleTokenBlur() { toggleBlur('token-trade'); }
+
+/* ── Agent tab switch ───────────────────────────────────────────────── */
+function switchAgent(name) {
+  ['trade', 'eval'].forEach(a => {
+    document.getElementById('agent-' + a).style.display = a === name ? 'block' : 'none';
+    document.getElementById('tab-' + a).classList.toggle('active', a === name);
+  });
+}
+
+/* ── Auth ───────────────────────────────────────────────────────────── */
 async function doLogin() {
   const user = document.getElementById('inp-user').value.trim();
   const pass = document.getElementById('inp-pass').value;
@@ -1223,21 +1477,39 @@ function showErr(msg) {
   el.style.display = 'flex';
 }
 
-function hideErr() {
-  document.getElementById('login-err').style.display = 'none';
-}
+function hideErr() { document.getElementById('login-err').style.display = 'none'; }
 
 function showApp() {
   document.getElementById('login-screen').style.display = 'none';
   document.getElementById('app').style.display = 'block';
+  // Update user badge
+  if (SESSION) {
+    document.getElementById('user-name').textContent = SESSION.username;
+    document.getElementById('user-avatar').textContent = SESSION.username.charAt(0).toUpperCase();
+  }
   startRefresh();
 }
 
 /* Auto-restore session */
 window.addEventListener('load', async () => {
+  // Apply saved theme
+  const savedTheme = localStorage.getItem('ft_theme') || 'dark';
+  applyTheme(savedTheme === 'dark');
+
+  // Apply sidebar state
+  const sidebarCollapsed = localStorage.getItem('ft_sidebar') === '1';
+  if (sidebarCollapsed) document.getElementById('sidebar').classList.add('collapsed');
+
+  // Mobile detection
+  if (window.innerWidth <= 768) {
+    document.getElementById('btn-hamburger').style.display = 'flex';
+  }
+
+  // Keyboard login
   document.getElementById('inp-pass').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
   document.getElementById('inp-user').addEventListener('keydown', e => { if (e.key === 'Enter') document.getElementById('inp-pass').focus(); });
 
+  // Try restore session
   const saved = sessionStorage.getItem('ft_session');
   if (saved) {
     try {
@@ -1249,7 +1521,7 @@ window.addEventListener('load', async () => {
   }
 });
 
-/* ── Navigation ────────────────────────────────────────────── */
+/* ── Navigation ─────────────────────────────────────────────────────── */
 const PAGE_TITLES = {
   dashboard: 'Overview',
   strategies: 'Strategies',
@@ -1265,9 +1537,10 @@ function switchPage(name, el) {
   document.getElementById('page-' + name).classList.add('active');
   document.getElementById('topbar-title').textContent = PAGE_TITLES[name] || name;
   currentPage = name;
+  if (window.innerWidth <= 768) closeMobileSidebar();
 }
 
-/* ── API ───────────────────────────────────────────────────── */
+/* ── API ────────────────────────────────────────────────────────────── */
 async function api(tool, args = {}) {
   const r = await fetch('/messages/', {
     method: 'POST',
@@ -1295,60 +1568,101 @@ async function pingServer() {
   } catch { return false; }
 }
 
-/* ── Render ────────────────────────────────────────────────── */
+/* ── Render helpers ─────────────────────────────────────────────────── */
 function stratHTML(list) {
-  if (!list?.length) return '<div class="empty"><div class="empty-icon">📂</div><div class="empty-title">Belum ada strategi</div></div>';
+  if (!list?.length) return `<div class="empty">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+    <div class="empty-title">Belum ada strategi</div>
+    <div class="empty-sub">Strategi akan muncul setelah dibuat via Hermes</div>
+  </div>`;
   return list.map(s =>
     `<div class="strat-row">
       <span class="strat-name">${esc(s)}</span>
-      <span class="tag tag-blue">ready</span>
+      <span class="badge badge-accent">ready</span>
     </div>`
   ).join('');
 }
 
+function jobBadge(status) {
+  const map = {
+    pending:   'badge-warning',
+    running:   'badge-info',
+    completed: 'badge-success',
+    failed:    'badge-danger',
+    cancelled: 'badge-neutral',
+  };
+  return `<span class="badge ${map[status] || 'badge-neutral'}">${status}</span>`;
+}
+
+function typeBadge(type) {
+  return `<span class="badge badge-neutral">${esc(type)}</span>`;
+}
+
 function jobsHTML(list) {
-  if (!list?.length) return '<div class="empty"><div class="empty-icon">💤</div><div class="empty-title">Belum ada job</div></div>';
+  if (!list?.length) return `<div class="empty">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>
+    <div class="empty-title">Belum ada job</div>
+    <div class="empty-sub">Job backtest dan hyperopt akan muncul di sini</div>
+  </div>`;
   return list.map(j => {
-    const tc = { pending:'tag-yellow', running:'tag-blue', completed:'tag-green', failed:'tag-red', cancelled:'tag-gray' }[j.status] || 'tag-gray';
     const t = new Date(j.created_at).toLocaleTimeString('id-ID');
+    const d = new Date(j.created_at).toLocaleDateString('id-ID', {day:'2-digit',month:'short'});
     return `<div class="job-row">
       <div class="job-top">
         <span class="job-id">#${esc(j.job_id)}</span>
-        <span class="tag ${tc}">${j.status}</span>
+        <div style="display:flex;gap:6px;align-items:center">${typeBadge(j.job_type)} ${jobBadge(j.status)}</div>
       </div>
-      <div class="job-meta">${esc(j.job_type)} · ${esc(j.strategy_name)} · ${t}</div>
+      <div class="job-meta">${esc(j.strategy_name)} · ${d} ${t}</div>
       ${j.status === 'running' ? `<div class="pbar"><div class="pfill" style="width:${j.progress || 5}%"></div></div>` : ''}
       ${j.error ? `<div class="job-err">${esc(j.error.slice(0, 120))}…</div>` : ''}
     </div>`;
   }).join('');
 }
 
+function cellColor(val, thresholds) {
+  if (val == null) return 'c-muted';
+  const [good, ok] = thresholds;
+  if (val >= good) return 'c-success';
+  if (val >= ok)   return 'c-warning';
+  return 'c-danger';
+}
+
 function resultsTableHTML(list) {
-  if (!list?.length) return '<div class="empty"><div class="empty-icon">📈</div><div class="empty-title">Belum ada hasil backtest</div></div>';
-  const rows = list.map(r => {
-    const vc = r.verdict === 'PASS' ? 'tag-green' : r.verdict === 'OPTIMIZE' ? 'tag-yellow' : 'tag-red';
-    const sc = (r.sharpe||0)>1.5 ? 'c-green' : (r.sharpe||0)>1 ? 'c-yellow' : 'c-red';
-    const pc = (r.profit||0)>0 ? 'c-green' : 'c-red';
-    const dc = (r.drawdown||0)<0.15 ? 'c-green' : (r.drawdown||0)<0.25 ? 'c-yellow' : 'c-red';
+  if (!list?.length) return `<div class="empty">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+    <div class="empty-title">Belum ada hasil backtest</div>
+    <div class="empty-sub">Selesaikan backtest job terlebih dahulu</div>
+  </div>`;
+
+  const sorted = [...list].sort((a, b) => (b.sharpe ?? -99) - (a.sharpe ?? -99));
+
+  const rows = sorted.map(r => {
+    const vc = r.verdict === 'PASS' ? 'badge-success' : r.verdict === 'OPTIMIZE' ? 'badge-warning' : 'badge-danger';
+    const sc = cellColor(r.sharpe,   [1.5, 1.0]);
+    const pc = (r.profit ?? 0) > 0 ? 'c-success' : 'c-danger';
+    const dc = (r.drawdown ?? 1) < 0.15 ? 'c-success' : (r.drawdown ?? 1) < 0.25 ? 'c-warning' : 'c-danger';
+    const wc = cellColor(r.win_rate, [50, 40]);
     return `<tr>
-      <td class="c-blue">#${esc(r.job_id)}</td>
+      <td class="c-accent">#${esc(r.job_id)}</td>
       <td class="strat-col">${esc(r.strategy)}</td>
-      <td class="${sc}">${r.sharpe != null ? r.sharpe.toFixed(2) : '—'}</td>
-      <td class="${pc}">${r.profit != null ? (r.profit*100).toFixed(2)+'%' : '—'}</td>
-      <td class="${dc}">${r.drawdown != null ? (r.drawdown*100).toFixed(2)+'%' : '—'}</td>
-      <td class="c-muted">${r.win_rate != null ? r.win_rate.toFixed(1)+'%' : '—'}</td>
-      <td class="c-muted">${r.trades ?? '—'}</td>
-      <td><span class="tag ${vc}">${r.verdict || '—'}</span></td>
+      <td class="r ${sc}">${r.sharpe != null ? r.sharpe.toFixed(2) : '—'}</td>
+      <td class="r ${pc}">${r.profit != null ? (r.profit*100).toFixed(2)+'%' : '—'}</td>
+      <td class="r ${dc}">${r.drawdown != null ? (r.drawdown*100).toFixed(2)+'%' : '—'}</td>
+      <td class="r ${wc}">${r.win_rate != null ? r.win_rate.toFixed(1)+'%' : '—'}</td>
+      <td class="r c-muted">${r.trades ?? '—'}</td>
+      <td><span class="badge ${vc}">${r.verdict || '—'}</span></td>
     </tr>`;
   }).join('');
-  return `<table class="rtable">
+
+  return `<div class="table-wrap"><table class="rtable">
     <thead><tr>
-      <th>Job</th><th>Strategy</th><th>Sharpe</th>
-      <th>Profit</th><th>Drawdown</th><th>Win Rate</th>
-      <th>Trades</th><th>Verdict</th>
+      <th>Job</th><th>Strategy</th>
+      <th class="r">Sharpe ↓</th><th class="r">Profit</th>
+      <th class="r">Drawdown</th><th class="r">Win Rate</th>
+      <th class="r">Trades</th><th>Verdict</th>
     </tr></thead>
     <tbody>${rows}</tbody>
-  </table>`;
+  </table></div>`;
 }
 
 function setStatus(online) {
@@ -1358,7 +1672,7 @@ function setStatus(online) {
   lbl.textContent = online ? 'Online' : 'Offline';
 }
 
-/* ── Refresh ───────────────────────────────────────────────── */
+/* ── Refresh ────────────────────────────────────────────────────────── */
 async function refreshAll() {
   if (!SESSION) return;
 
@@ -1366,16 +1680,14 @@ async function refreshAll() {
     const strats = await api('tool_list_strategies');
     setStatus(true);
 
-    // Update all strategy views
     const sc = strats.count ?? 0;
     document.getElementById('s-strategies').textContent = sc;
-    document.getElementById('badge-strats').textContent = sc;
+    document.getElementById('badge-strats').textContent  = sc;
     document.getElementById('badge-strats2').textContent = sc;
-    document.getElementById('overview-strats').innerHTML = stratHTML(strats.strategies?.slice(0, 6));
-    document.getElementById('all-strats-list').innerHTML = stratHTML(strats.strategies);
+    document.getElementById('overview-strats').innerHTML  = stratHTML(strats.strategies?.slice(0, 6));
+    document.getElementById('all-strats-list').innerHTML  = stratHTML(strats.strategies);
   } catch { setStatus(false); }
 
-  // Poll active jobs
   for (const [id, job] of Object.entries(jobsMap)) {
     if (!['pending', 'running'].includes(job.status)) continue;
     try {
@@ -1397,7 +1709,7 @@ async function fetchResult(jobId, stratName) {
     const s = await api('tool_get_performance_summary', { job_id: jobId });
     for (const ev of (s.evaluation || [])) {
       resultsList.unshift({
-        job_id: jobId,
+        job_id:   jobId,
         strategy: ev.strategy || stratName,
         sharpe:   ev.metrics?.sharpe,
         profit:   ev.metrics?.profit_total_pct,
@@ -1412,45 +1724,40 @@ async function fetchResult(jobId, stratName) {
 }
 
 function renderAllJobs() {
-  const all = Object.values(jobsMap).sort((a,b) => new Date(b.created_at) - new Date(a.created_at));
+  const all    = Object.values(jobsMap).sort((a,b) => new Date(b.created_at) - new Date(a.created_at));
   const active = all.filter(j => ['pending','running'].includes(j.status));
   const done   = all.filter(j => j.status === 'completed');
   const failed = all.filter(j => j.status === 'failed');
 
-  document.getElementById('s-active').textContent  = active.length;
-  document.getElementById('s-done').textContent    = done.length;
-  document.getElementById('s-failed').textContent  = failed.length;
+  document.getElementById('s-active').textContent   = active.length || '—';
+  document.getElementById('s-done').textContent     = done.length   || '—';
+  document.getElementById('s-failed').textContent   = failed.length || '—';
   document.getElementById('badge-jobs').textContent  = active.length;
   document.getElementById('badge-jobs2').textContent = all.length;
 
-  document.getElementById('overview-jobs').innerHTML  = jobsHTML(active.slice(0, 4));
-  document.getElementById('all-jobs-list').innerHTML  = jobsHTML(all);
+  document.getElementById('overview-jobs').innerHTML = jobsHTML(active.slice(0, 4));
+  document.getElementById('all-jobs-list').innerHTML = jobsHTML(all);
 }
 
 function renderAllResults() {
   document.getElementById('badge-results').textContent  = resultsList.length;
   document.getElementById('badge-results2').textContent = resultsList.length;
-
-  const html = resultsTableHTML(resultsList.slice(0, 5));
-  const full  = resultsTableHTML(resultsList);
-  document.getElementById('overview-results').innerHTML = html;
-  document.getElementById('all-results-table').innerHTML = full;
+  document.getElementById('overview-results').innerHTML = resultsTableHTML(resultsList.slice(0, 5));
+  document.getElementById('all-results-table').innerHTML = resultsTableHTML(resultsList);
 }
 
 function startRefresh() {
   refreshAll();
   countdown = 15;
-  document.getElementById('sidebar-refresh').textContent = 'refresh 15s';
   clearInterval(timer);
   timer = setInterval(() => {
     countdown--;
-    document.getElementById('sidebar-refresh').textContent = `refresh ${countdown}s`;
-    document.getElementById('refresh-txt').textContent = `auto-refresh ${countdown}s`;
+    document.getElementById('countdown-txt').textContent = `auto-refresh ${countdown}s`;
     if (countdown <= 0) { countdown = 15; refreshAll(); }
   }, 1000);
 }
 
-/* ── Utils ─────────────────────────────────────────────────── */
+/* ── Utils ──────────────────────────────────────────────────────────── */
 function esc(s) {
   return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
@@ -1464,7 +1771,7 @@ function copyText(elId, btn) {
   });
 }
 
-/* API untuk Hermes Agent push job ke dashboard */
+/* ── API untuk Hermes push job ke dashboard ─────────────────────────── */
 window.trackJob = (jobId, jobType, strategyName) => {
   jobsMap[jobId] = {
     job_id: jobId, job_type: jobType,

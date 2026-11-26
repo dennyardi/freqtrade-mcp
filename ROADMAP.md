@@ -55,12 +55,16 @@
 
 ---
 
-## 📋 Phase 4 — Hardening & Observability
+## ✅ Phase 4 — Hardening & Observability (Sebagian Selesai)
 
+- [x] **Job persistence SQLite** — jobs tersimpan di `/opt/freqtrade-mcp/data/jobs.db`, survive restart
+  - [x] `tools/db.py` — SQLite layer (init, save, load)
+  - [x] `tools/jobs.py` — bootstrap() load semua jobs saat startup; jobs pending/running otomatis ditandai failed
+  - [x] `tools/backtest.py` — persist setiap perubahan status + progress tracking akurat (parse % output)
+  - [x] `tools/hyperopt.py` — persist setiap perubahan status + progress tracking akurat (parse Epoch X/Y)
+- [x] **Progress tracking akurat** — parse output Freqtrade realtime via async line-by-line streaming
 - [ ] Rate limiting per Bearer Token (max 5 concurrent jobs)
-- [ ] Job persistence — simpan jobs ke SQLite agar survive restart
 - [ ] Log streaming — stream stdout backtest ke SSE event
-- [ ] Progress tracking yang lebih akurat (parse Freqtrade output)
 - [ ] Webhook notifikasi ke Telegram saat job selesai
 - [ ] Metrics endpoint (`/metrics`) untuk Prometheus
 - [ ] Health check yang lebih detail (disk space, Freqtrade version)
@@ -105,6 +109,10 @@ Freqtrade CLI
    ├── hyperopt (SharpeHyperOptLoss)
    ├── download-data (Binance)
    └── check-freqtrade-files
+         │
+         ▼
+SQLite (jobs.db)
+   └── /opt/freqtrade-mcp/data/jobs.db
 ```
 
 ---
@@ -120,3 +128,5 @@ Freqtrade CLI
 | Job pattern | Async + `job_id` | Backtest/hyperopt bisa >10 menit, non-blocking |
 | Dashboard auth | username+password → token | UX lebih friendly dari paste token langsung |
 | Install method | Virtualenv (no Docker) | Lebih ringan, latency lebih rendah di VPS kecil |
+| Job persistence | SQLite | Lightweight, zero dependency, cukup untuk 1 instance |
+| Progress parsing | Async line streaming | Realtime, tidak perlu polling file |

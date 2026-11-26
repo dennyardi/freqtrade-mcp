@@ -19,15 +19,18 @@ async def run_backtest(
     job_id = str(uuid.uuid4())[:8]
     job = Job(job_id=job_id, job_type="backtest", strategy_name=strategy_name)
     _jobs[job_id] = job
+    job.persist()
     asyncio.create_task(_execute_backtest(job, pairs, timeframe, timerange))
     return {"job_id": job_id, "status": "pending", "message": "Backtest queued"}
 
 
 async def _execute_backtest(job, pairs, timeframe, timerange):
     job.status = JobStatus.RUNNING
-    pairs_args = "--pairs " + " ".join(f'"{p}"' for p in pairs) if pairs else ""
+    job.persist()
+
+    pairs_args   = "--pairs " + " ".join(f'"{p}"' for p in pairs) if pairs else ""
     timerange_arg = f"--timerange {timerange}" if timerange else ""
-    result_file = RESULTS_DIR / f"backtest_{job.job_id}.json"
+    result_file  = RESULTS_DIR / f"backtest_{job.job_id}.json"
 
     cmd = (
         f"{FREQTRADE_BIN} backtesting"
@@ -47,17 +50,35 @@ async def _execute_backtest(job, pairs, timeframe, timerange):
         stderr=asyncio.subprocess.STDOUT,
     )
     job.process = proc
-    stdout, _ = await proc.communicate()
-    output = stdout.decode()
+
+    # Stream output baris per baris agar progress bisa diupdate
+    lines = []
+    async for raw in proc.stdout:
+        line = raw.decode(errors="replace")
+        lines.append(line)
+        # Freqtrade mencetak "Backtesting with X%" — parse progress kasar
+        if "%" in line:
+            try:
+                pct_str = [t for t in line.split() if "%" in t][0].replace("%", "")
+                job.progress = min(int(float(pct_str)), 99)
+                job.persist()
+            except Exception:
+                pass
+
+    await proc.wait()
+    output = "".join(lines)
     job.finished_at = datetime.utcnow().isoformat()
 
     if proc.returncode != 0:
         job.status = JobStatus.FAILED
-        job.error = output[-3000:]
+        job.error  = output[-3000:]
+        job.persist()
         return
 
-    job.status = JobStatus.COMPLETED
-    job.result = {"result_file": str(result_file), "log": output[-2000:]}
+    job.status   = JobStatus.COMPLETED
+    job.progress = 100
+    job.result   = {"result_file": str(result_file), "log": output[-2000:]}
+    job.persist()
 
 
 async def get_backtest_results(job_id: str) -> dict:
@@ -83,15 +104,15 @@ async def get_backtest_results(job_id: str) -> dict:
         for strat, m in data["strategy"].items():
             total = max(m.get("total_trades", 1), 1)
             summary[strat] = {
-                "total_trades": m.get("total_trades"),
-                "win_rate": round(m.get("wins", 0) / total * 100, 2),
+                "total_trades":    m.get("total_trades"),
+                "win_rate":        round(m.get("wins", 0) / total * 100, 2),
                 "profit_total_pct": m.get("profit_total_pct"),
-                "profit_factor": m.get("profit_factor"),
+                "profit_factor":   m.get("profit_factor"),
                 "max_drawdown_pct": m.get("max_drawdown_account"),
-                "sharpe": m.get("sharpe"),
-                "calmar": m.get("calmar"),
-                "sortino": m.get("sortino"),
-                "avg_duration": m.get("holding_avg"),
+                "sharpe":          m.get("sharpe"),
+                "calmar":          m.get("calmar"),
+                "sortino":         m.get("sortino"),
+                "avg_duration":    m.get("holding_avg"),
             }
 
     return {"job_id": job_id, "summary": summary, "raw_file": str(result_file)}

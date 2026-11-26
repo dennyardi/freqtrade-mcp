@@ -19,6 +19,7 @@ async def run_hyperopt(
     job_id = str(uuid.uuid4())[:8]
     job = Job(job_id=job_id, job_type="hyperopt", strategy_name=strategy_name)
     _jobs[job_id] = job
+    job.persist()
     if spaces is None:
         spaces = ["roi", "stoploss"]
     asyncio.create_task(_execute_hyperopt(job, epochs, spaces, timerange))
@@ -27,7 +28,9 @@ async def run_hyperopt(
 
 async def _execute_hyperopt(job, epochs, spaces, timerange):
     job.status = JobStatus.RUNNING
-    spaces_arg = " ".join(spaces)
+    job.persist()
+
+    spaces_arg    = " ".join(spaces)
     timerange_arg = f"--timerange {timerange}" if timerange else ""
 
     cmd = (
@@ -48,17 +51,36 @@ async def _execute_hyperopt(job, epochs, spaces, timerange):
         stderr=asyncio.subprocess.STDOUT,
     )
     job.process = proc
-    stdout, _ = await proc.communicate()
-    output = stdout.decode()
+
+    # Stream output dan update progress berdasarkan epoch
+    lines = []
+    async for raw in proc.stdout:
+        line = raw.decode(errors="replace")
+        lines.append(line)
+        # Freqtrade hyperopt mencetak "Epoch X/Y" — parse progress
+        if "Epoch" in line and "/" in line:
+            try:
+                parts = [t for t in line.split() if "/" in t][0]
+                current, total = parts.split("/")
+                job.progress = min(int(int(current) / int(total) * 100), 99)
+                job.persist()
+            except Exception:
+                pass
+
+    await proc.wait()
+    output = "".join(lines)
     job.finished_at = datetime.utcnow().isoformat()
 
     if proc.returncode != 0:
         job.status = JobStatus.FAILED
-        job.error = output[-3000:]
+        job.error  = output[-3000:]
+        job.persist()
         return
 
-    job.status = JobStatus.COMPLETED
-    job.result = {"log": output[-3000:]}
+    job.status   = JobStatus.COMPLETED
+    job.progress = 100
+    job.result   = {"log": output[-3000:]}
+    job.persist()
 
 
 async def get_hyperopt_results(job_id: str) -> dict:
