@@ -162,8 +162,8 @@ class BearerAuthMiddleware:
             await self.app(scope, receive, send)
             return
 
-        # Tool-level enforcement untuk POST /messages/
-        if path.startswith("/messages") and scope.get("method", "GET") == "POST":
+        # Tool-level enforcement untuk POST /api/tools dan /messages/
+        if (path == "/api/tools" or path.startswith("/messages")) and scope.get("method", "GET") == "POST":
             body_chunks = []
             more_body = True
             while more_body:
@@ -208,7 +208,47 @@ async def health(request: Request):
 SPA_ROUTES = {"/overview", "/strategies", "/jobs", "/results", "/connect"}
 
 async def dashboard(request: Request):
-    return HTMLResponse((BASE_DIR / "dashboard.html").read_text())
+    content = (BASE_DIR / "dashboard.html").read_text()
+    return HTMLResponse(content, headers={
+        "Cache-Control": "no-store, no-cache, must-revalidate",
+        "Pragma": "no-cache",
+        "Expires": "0",
+    })
+
+async def api_tools(request: Request):
+    """REST endpoint untuk dashboard — panggil tool functions langsung tanpa MCP protocol."""
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse({"error": "Invalid JSON"}, status_code=400)
+
+    tool_name = body.get("tool")
+    args = body.get("args", {})
+
+    TOOL_MAP = {
+        "tool_list_strategies":        lambda a: list_strategies(),
+        "tool_get_job_status":         lambda a: get_job_status(job_id=a["job_id"]),
+        "tool_cancel_job":             lambda a: cancel_job(job_id=a["job_id"]),
+        "tool_get_backtest_results":   lambda a: get_backtest_results(job_id=a["job_id"]),
+        "tool_get_hyperopt_results":   lambda a: get_hyperopt_results(job_id=a["job_id"]),
+        "tool_get_performance_summary":lambda a: get_performance_summary(job_id=a["job_id"]),
+        "tool_compare_strategies":     lambda a: compare_strategies(job_ids=a["job_ids"]),
+        "tool_run_backtest":           lambda a: run_backtest(**a),
+        "tool_run_hyperopt":           lambda a: run_hyperopt(**a),
+        "tool_download_data":          lambda a: download_data(**a),
+        "tool_create_strategy":        lambda a: create_strategy(**a),
+        "tool_validate_strategy":      lambda a: validate_strategy(**a),
+    }
+
+    fn = TOOL_MAP.get(tool_name)
+    if not fn:
+        return JSONResponse({"error": f"Unknown tool: {tool_name}"}, status_code=404)
+
+    try:
+        result = await fn(args)
+        return JSONResponse({"ok": True, "result": result})
+    except Exception as e:
+        return JSONResponse({"ok": False, "error": str(e)}, status_code=500)
 
 async def api_login(request: Request):
     try:
@@ -228,24 +268,19 @@ async def api_login(request: Request):
     return JSONResponse({"detail": "Username atau password salah"}, status_code=401)
 
 sse_app = mcp.sse_app(host="*")
-http_app = mcp.streamable_http_app(
-    streamable_http_path="/mcp",
-    stateless_http=True,
-    host="*",
-)
 
 _app = Starlette(
     routes=[
-        Route("/health",    health),
-        Route("/",          dashboard),
-        Route("/overview",  dashboard),
-        Route("/strategies",dashboard),
-        Route("/jobs",      dashboard),
-        Route("/results",   dashboard),
-        Route("/connect",   dashboard),
-        Route("/api/login", api_login, methods=["POST"]),
-        Mount("/mcp",       app=http_app),   # Streamable HTTP (stateless) — untuk Hermes & dashboard
-        Mount("/",          app=sse_app),    # SSE legacy — backward compat
+        Route("/health",        health),
+        Route("/",              dashboard),
+        Route("/overview",      dashboard),
+        Route("/strategies",    dashboard),
+        Route("/jobs",          dashboard),
+        Route("/results",       dashboard),
+        Route("/connect",       dashboard),
+        Route("/api/login",     api_login, methods=["POST"]),
+        Route("/api/tools",     api_tools, methods=["POST"]),   # REST endpoint untuk dashboard
+        Mount("/",              app=sse_app),
     ],
 )
 

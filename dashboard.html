@@ -1684,23 +1684,19 @@ function pathToPage(path) {
 
 /* ── API ────────────────────────────────────────────────────────────── */
 async function api(tool, args = {}) {
-  const r = await fetch('/mcp', {
+  const r = await fetch('/api/tools', {
     method: 'POST',
     headers: {
       'Authorization': 'Bearer ' + SESSION.token,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({
-      jsonrpc: '2.0', id: Date.now(),
-      method: 'tools/call',
-      params: { name: tool, arguments: args },
-    }),
+    body: JSON.stringify({ tool, args }),
   });
   if (r.status === 401) { doLogout(); throw new Error('Session expired'); }
   if (!r.ok) throw new Error('HTTP ' + r.status);
   const d = await r.json();
-  if (d.result?.content?.[0]?.text) return JSON.parse(d.result.content[0].text);
-  throw new Error(JSON.stringify(d));
+  if (d.ok) return d.result;
+  throw new Error(d.error || 'Tool error');
 }
 
 async function pingServer() {
