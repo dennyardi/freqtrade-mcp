@@ -663,61 +663,167 @@ aside.collapsed .btn-logout span { display: none; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
 /* ── Connect Page ──────────────────────────────────────────────────────── */
-.connect-wrap { max-width: 800px; }
+.connect-wrap { max-width: 760px; }
 
-.page-header { margin-bottom: 28px; }
+.page-header { margin-bottom: 24px; }
 .page-header h2 { font-size: 20px; font-weight: 600; letter-spacing: -0.02em; margin-bottom: 4px; }
 .page-header p { font-size: 13px; color: var(--text-secondary); }
 
-.info-banner {
-  background: var(--accent-tint);
-  border: 1px solid rgba(59,130,246,0.2);
-  border-radius: var(--r-md);
-  padding: 14px 16px;
-  margin-bottom: 24px;
-  font-size: 13px;
-  color: var(--text-secondary);
-  line-height: 1.8;
-}
-
-.info-banner strong { color: var(--text-primary); font-weight: 500; }
-.info-banner code { font-family: "JetBrains Mono", monospace; color: var(--accent); font-size: 12px; }
-
-.step-block { margin-bottom: 28px; }
-
-.step-label { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
-
-.step-num {
-  width: 22px; height: 22px;
-  background: var(--accent);
-  border-radius: 50%;
-  display: flex; align-items: center; justify-content: center;
-  font-size: 11px; font-weight: 600;
-  color: var(--on-accent); flex-shrink: 0;
-}
-
-.step-label h3 { font-size: 14px; font-weight: 600; letter-spacing: -0.01em; }
-
-.step-block p {
-  font-size: 13px; color: var(--text-secondary);
-  margin-bottom: 10px; margin-left: 32px; line-height: 1.6;
-}
-
-.code-block {
-  background: var(--bg-canvas);
+/* Endpoint info strip */
+.endpoint-strip {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 16px;
+  background: var(--bg-surface);
   border: 1px solid var(--border);
   border-radius: var(--r-md);
+  padding: 12px 16px;
+  margin-bottom: 20px;
+}
+
+.endpoint-kv { display: flex; align-items: center; gap: 6px; }
+
+.endpoint-label {
+  font-size: 11px; font-weight: 500;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+}
+
+.endpoint-val {
+  font-family: "JetBrains Mono", "SFMono-Regular", "Courier New", monospace;
+  font-size: 12px; font-feature-settings: "tnum";
+  color: var(--accent);
+  white-space: nowrap;
+}
+
+.endpoint-sep {
+  width: 1px; height: 16px;
+  background: var(--border-strong);
+  flex-shrink: 0;
+}
+
+/* Agent tabs */
+.agent-tabs {
+  display: flex; gap: 2px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  padding: 3px;
+  margin-bottom: 24px;
+  width: fit-content;
+}
+
+.agent-tab {
+  display: flex; align-items: center; gap: 6px;
+  background: none;
+  border: none;
+  border-radius: var(--r-sm);
+  padding: 7px 14px;
+  font-size: 13px; font-weight: 500;
+  font-family: inherit;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+  white-space: nowrap;
+}
+
+.agent-tab:hover { background: var(--bg-hover); color: var(--text-primary); }
+
+.agent-tab.active {
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  box-shadow: 0 1px 2px rgba(0,0,0,0.08);
+}
+
+.agent-tab svg { width: 14px; height: 14px; flex-shrink: 0; }
+
+/* Connect sections */
+.connect-section { margin-bottom: 20px; }
+
+.connect-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  overflow: hidden;
+  box-shadow: var(--card-shadow);
+}
+
+.connect-card-header {
+  display: flex; align-items: center; gap: 10px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.connect-card-icon {
+  width: 28px; height: 28px;
+  background: var(--accent-tint);
+  border-radius: var(--r-sm);
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+  color: var(--accent);
+}
+
+.connect-card-icon svg { width: 14px; height: 14px; }
+
+.connect-card-title {
+  font-size: 13px; font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--text-primary);
+  flex: 1;
+}
+
+.connect-card-badge { flex-shrink: 0; }
+
+.connect-card-body { padding: 16px; }
+
+.connect-card-body p {
+  font-size: 13px; color: var(--text-secondary);
+  line-height: 1.6; margin-bottom: 12px;
+}
+
+.connect-card-body p:last-child { margin-bottom: 0; }
+
+/* Token row */
+.token-row {
+  display: flex; align-items: center; gap: 8px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  padding: 8px 12px;
+}
+
+.token-val {
+  flex: 1;
+  font-family: "JetBrains Mono", "SFMono-Regular", "Courier New", monospace;
+  font-size: 12px; font-feature-settings: "tnum";
+  color: var(--accent);
+  min-width: 0;
+  transition: filter 0.2s;
+}
+
+.token-val.blurred { filter: blur(4px); user-select: none; }
+
+/* Code block */
+.code-block {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
   overflow: hidden;
 }
 
 .code-head {
   display: flex; align-items: center; justify-content: space-between;
-  padding: 8px 14px;
+  padding: 7px 12px;
   border-bottom: 1px solid var(--border);
-  background: var(--bg-elevated);
+  background: var(--bg-hover);
 }
 
-.code-lang { font-size: 10px; font-weight: 500; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.07em; }
+.code-lang {
+  font-size: 10px; font-weight: 500;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+}
 
 .btn-copy {
   background: none;
@@ -729,67 +835,64 @@ aside.collapsed .btn-logout span { display: none; }
   font-family: inherit;
   cursor: pointer;
   transition: border-color 0.15s, color 0.15s;
+  flex-shrink: 0;
 }
 
 .btn-copy:hover { border-color: var(--accent); color: var(--accent); }
 .btn-copy.copied { border-color: var(--success-text); color: var(--success-text); }
 
 pre {
-  padding: 14px 16px;
-  font-family: "JetBrains Mono", monospace;
+  padding: 12px 14px;
+  font-family: "JetBrains Mono", "SFMono-Regular", "Courier New", monospace;
   font-size: 12px; line-height: 1.7;
   color: var(--text-primary);
   overflow-x: auto; white-space: pre;
+  margin: 0;
 }
 
-/* Token row */
-.token-row {
-  display: flex; align-items: center; gap: 10px;
-  background: var(--bg-canvas);
-  border: 1px solid var(--border);
-  border-radius: var(--r-sm);
-  padding: 10px 14px;
-  margin-bottom: 20px;
-}
-
-.token-val {
-  flex: 1;
-  font-family: "JetBrains Mono", monospace;
-  font-size: 12px; font-feature-settings: "tnum";
-  color: var(--accent);
-  word-break: break-all;
-  transition: filter 0.2s;
-}
-
-.token-val.blurred { filter: blur(5px); user-select: none; }
-
-.tools-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-left: 32px; }
+/* Tools grid inside connect cards */
+.tools-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 
 .tools-panel {
-  background: var(--bg-canvas);
+  background: var(--bg-elevated);
   border: 1px solid var(--border);
-  border-radius: var(--r-md);
+  border-radius: var(--r-sm);
   overflow: hidden;
 }
 
 .tools-panel-header {
-  padding: 10px 14px;
-  background: var(--bg-elevated);
+  padding: 8px 12px;
   border-bottom: 1px solid var(--border);
   font-size: 11px; font-weight: 500;
-  color: var(--text-secondary);
-  display: flex; align-items: center; gap: 6px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
 }
 
 .tool-item {
-  padding: 8px 14px;
+  padding: 8px 12px;
   border-bottom: 1px solid var(--border-subtle);
   display: flex; flex-direction: column; gap: 2px;
 }
 
 .tool-item:last-child { border-bottom: none; }
-.tool-name { font-family: "JetBrains Mono", monospace; font-size: 11px; color: var(--accent); font-weight: 500; }
+.tool-name { font-family: "JetBrains Mono", "SFMono-Regular", "Courier New", monospace; font-size: 11px; color: var(--accent); font-weight: 500; }
 .tool-desc { font-size: 11px; color: var(--text-muted); }
+
+/* Access denied note */
+.access-note {
+  display: flex; align-items: flex-start; gap: 8px;
+  background: var(--danger-bg);
+  border: 1px solid rgba(239,68,68,0.15);
+  border-radius: var(--r-sm);
+  padding: 10px 12px;
+  margin-top: 12px;
+  font-size: 12px;
+  color: var(--danger-text);
+  line-height: 1.5;
+}
+
+.access-note svg { width: 14px; height: 14px; flex-shrink: 0; margin-top: 1px; }
 
 /* ── Agent Tabs ────────────────────────────────────────────────────────── */
 .agent-tab {
@@ -830,6 +933,8 @@ pre {
   .stat-grid { grid-template-columns: 1fr; }
   .two-col { grid-template-columns: 1fr; }
   .tools-grid { grid-template-columns: 1fr; }
+  .endpoint-strip { flex-direction: column; align-items: flex-start; gap: 8px; }
+  .endpoint-sep { display: none; }
   aside {
     position: fixed; top: 0; left: 0; height: 100vh;
     transform: translateX(-100%);
@@ -1129,93 +1234,133 @@ pre {
       <!-- ── PAGE: Connect ──────────────────────────────────────────────── -->
       <div class="page" id="page-connect">
         <div class="connect-wrap">
+
+          <!-- Page header -->
           <div class="page-header">
             <h2>Koneksi Hermes Agent</h2>
-            <p>Copy YAML di bawah lalu kirim langsung ke Hermes via chat Telegram untuk menghubungkan kedua agent.</p>
+            <p>Copy YAML konfigurasi di bawah, kirim ke chat Hermes di Telegram untuk menghubungkan agent.</p>
           </div>
 
-          <div class="info-banner">
-            <strong>MCP SSE Endpoint:</strong> <code>https://trade.dennyardi.com/sse</code><br>
-            <strong>Protocol:</strong> MCP v2.x over HTTP/SSE &nbsp;·&nbsp;
-            <strong>Auth:</strong> 2 Bearer Token terpisah — 1 per agent &nbsp;·&nbsp;
-            <strong>Enforcement:</strong> Server-side per token
+          <!-- Endpoint info strip -->
+          <div class="endpoint-strip">
+            <div class="endpoint-kv">
+              <span class="endpoint-label">Endpoint</span>
+              <span class="endpoint-val">https://trade.dennyardi.com/sse</span>
+            </div>
+            <div class="endpoint-sep"></div>
+            <div class="endpoint-kv">
+              <span class="endpoint-label">Protocol</span>
+              <span class="endpoint-val">MCP v2.x / SSE</span>
+            </div>
+            <div class="endpoint-sep"></div>
+            <div class="endpoint-kv">
+              <span class="endpoint-label">Auth</span>
+              <span class="endpoint-val">Bearer Token</span>
+            </div>
+            <div class="endpoint-sep"></div>
+            <div class="endpoint-kv">
+              <span class="endpoint-label">Enforcement</span>
+              <span class="endpoint-val">Server-side per token</span>
+            </div>
           </div>
 
-          <!-- Agent tabs -->
-          <div style="display:flex;gap:8px;margin-bottom:20px">
+          <!-- Agent tabs (segmented control) -->
+          <div class="agent-tabs">
             <button class="agent-tab active" id="tab-trade" onclick="switchAgent('trade')">
-              🤖 Agent Pembuat Strategi
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+              Agent Pembuat Strategi
             </button>
             <button class="agent-tab" id="tab-eval" onclick="switchAgent('eval')">
-              📊 Agent Evaluasi
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+              Agent Evaluasi
             </button>
           </div>
 
           <!-- ── AGENT TRADE ── -->
           <div id="agent-trade">
 
-            <!-- Token trade -->
-            <div class="step-block">
-              <div class="step-label">
-                <div class="step-num">🔑</div>
-                <h3>Bearer Token — Agent Pembuat Strategi</h3>
-              </div>
-              <p>Token ini memberi akses ke semua 12 tools (read + write). Khusus untuk <code style="font-family:monospace;color:var(--accent);font-size:12px">agentfreqtrade</code>.</p>
-              <div class="token-row">
-                <span class="token-val blurred" id="token-trade">ft-mcp-onam14mibilt1b99wkpr</span>
-                <button class="btn-icon" onclick="toggleBlur('token-trade')" title="Tampilkan token">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-                </button>
-                <button class="btn-copy" onclick="copyText('token-trade', this)">Copy</button>
+            <!-- Bearer Token -->
+            <div class="connect-section">
+              <div class="connect-card">
+                <div class="connect-card-header">
+                  <div class="connect-card-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                  </div>
+                  <span class="connect-card-title">Bearer Token</span>
+                  <span class="badge badge-accent connect-card-badge">agentfreqtrade</span>
+                </div>
+                <div class="connect-card-body">
+                  <p>Token ini memberi akses ke semua 12 tools (read + write). Simpan dengan aman, jangan bagikan ke pihak lain.</p>
+                  <div class="token-row">
+                    <span class="token-val blurred" id="token-trade">ft-mcp-onam14mibilt1b99wkpr</span>
+                    <button class="btn-icon" onclick="toggleBlur('token-trade')" title="Tampilkan / sembunyikan token">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                    </button>
+                    <button class="btn-copy" onclick="copyText('token-trade', this)">Copy</button>
+                  </div>
+                </div>
               </div>
             </div>
 
-            <!-- Step 1 trade: kirim YAML ke Telegram -->
-            <div class="step-block">
-              <div class="step-label">
-                <div class="step-num">1</div>
-                <h3>Kirim YAML ini ke Hermes via Telegram</h3>
-              </div>
-              <p>Copy seluruh blok YAML di bawah, lalu paste dan kirim ke chat <strong>agentfreqtrade</strong> di Telegram. Hermes akan otomatis membaca dan menerapkan konfigurasi MCP.</p>
-              <div class="code-block">
-                <div class="code-head">
-                  <span class="code-lang">yaml — paste ke Telegram</span>
-                  <button class="btn-copy" onclick="copyText('yaml-trade', this)">Copy</button>
+            <!-- YAML Config -->
+            <div class="connect-section">
+              <div class="connect-card">
+                <div class="connect-card-header">
+                  <div class="connect-card-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                  </div>
+                  <span class="connect-card-title">Kirim YAML ke Hermes via Telegram</span>
                 </div>
-                <pre id="yaml-trade">mcp:
+                <div class="connect-card-body">
+                  <p>Copy seluruh blok YAML di bawah, paste dan kirim ke chat <strong>agentfreqtrade</strong> di Telegram. Hermes akan membaca dan menerapkan konfigurasi MCP secara otomatis.</p>
+                  <div class="code-block">
+                    <div class="code-head">
+                      <span class="code-lang">yaml</span>
+                      <button class="btn-copy" onclick="copyText('yaml-trade', this)">Copy</button>
+                    </div>
+                    <pre id="yaml-trade">mcp:
   servers:
     freqtrade:
       type: sse
       url: https://trade.dennyardi.com/sse
       headers:
         Authorization: "Bearer ft-mcp-onam14mibilt1b99wkpr"</pre>
+                  </div>
+                </div>
               </div>
             </div>
 
-            <!-- Tools list trade -->
-            <div class="step-block">
-              <div class="step-label">
-                <div class="step-num">★</div>
-                <h3>12 Tools — Agent Pembuat Strategi</h3>
-              </div>
-              <div class="tools-grid" style="margin-left:0">
-                <div class="tools-panel">
-                  <div class="tools-panel-header">✍️ Write Tools (eksklusif)</div>
-                  <div class="tool-item"><span class="tool-name">tool_create_strategy</span><span class="tool-desc">Generate file strategi dari deskripsi</span></div>
-                  <div class="tool-item"><span class="tool-name">tool_validate_strategy</span><span class="tool-desc">Validasi strategi sebelum backtest</span></div>
-                  <div class="tool-item"><span class="tool-name">tool_download_data</span><span class="tool-desc">Download data historis Binance</span></div>
-                  <div class="tool-item"><span class="tool-name">tool_run_backtest</span><span class="tool-desc">Jalankan backtest (async)</span></div>
-                  <div class="tool-item"><span class="tool-name">tool_run_hyperopt</span><span class="tool-desc">Optimasi parameter (async)</span></div>
-                  <div class="tool-item"><span class="tool-name">tool_cancel_job</span><span class="tool-desc">Batalkan job yang berjalan</span></div>
+            <!-- Tools list -->
+            <div class="connect-section">
+              <div class="connect-card">
+                <div class="connect-card-header">
+                  <div class="connect-card-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+                  </div>
+                  <span class="connect-card-title">12 Tools yang Tersedia</span>
+                  <span class="badge badge-neutral connect-card-badge">write + read</span>
                 </div>
-                <div class="tools-panel">
-                  <div class="tools-panel-header">📖 Read Tools (shared)</div>
-                  <div class="tool-item"><span class="tool-name">tool_get_job_status</span><span class="tool-desc">Cek status &amp; progress job</span></div>
-                  <div class="tool-item"><span class="tool-name">tool_list_strategies</span><span class="tool-desc">Daftar semua strategi</span></div>
-                  <div class="tool-item"><span class="tool-name">tool_get_backtest_results</span><span class="tool-desc">Ambil hasil backtest</span></div>
-                  <div class="tool-item"><span class="tool-name">tool_get_hyperopt_results</span><span class="tool-desc">Ambil hasil hyperopt terbaik</span></div>
-                  <div class="tool-item"><span class="tool-name">tool_get_performance_summary</span><span class="tool-desc">Analisis + verdict + rekomendasi</span></div>
-                  <div class="tool-item"><span class="tool-name">tool_compare_strategies</span><span class="tool-desc">Bandingkan beberapa strategi</span></div>
+                <div class="connect-card-body">
+                  <div class="tools-grid">
+                    <div class="tools-panel">
+                      <div class="tools-panel-header">Write Tools — eksklusif</div>
+                      <div class="tool-item"><span class="tool-name">tool_create_strategy</span><span class="tool-desc">Generate file strategi dari deskripsi</span></div>
+                      <div class="tool-item"><span class="tool-name">tool_validate_strategy</span><span class="tool-desc">Validasi strategi sebelum backtest</span></div>
+                      <div class="tool-item"><span class="tool-name">tool_download_data</span><span class="tool-desc">Download data historis Binance</span></div>
+                      <div class="tool-item"><span class="tool-name">tool_run_backtest</span><span class="tool-desc">Jalankan backtest (async)</span></div>
+                      <div class="tool-item"><span class="tool-name">tool_run_hyperopt</span><span class="tool-desc">Optimasi parameter (async)</span></div>
+                      <div class="tool-item"><span class="tool-name">tool_cancel_job</span><span class="tool-desc">Batalkan job yang berjalan</span></div>
+                    </div>
+                    <div class="tools-panel">
+                      <div class="tools-panel-header">Read Tools — shared</div>
+                      <div class="tool-item"><span class="tool-name">tool_get_job_status</span><span class="tool-desc">Cek status &amp; progress job</span></div>
+                      <div class="tool-item"><span class="tool-name">tool_list_strategies</span><span class="tool-desc">Daftar semua strategi</span></div>
+                      <div class="tool-item"><span class="tool-name">tool_get_backtest_results</span><span class="tool-desc">Ambil hasil backtest</span></div>
+                      <div class="tool-item"><span class="tool-name">tool_get_hyperopt_results</span><span class="tool-desc">Ambil hasil hyperopt terbaik</span></div>
+                      <div class="tool-item"><span class="tool-name">tool_get_performance_summary</span><span class="tool-desc">Analisis + verdict + rekomendasi</span></div>
+                      <div class="tool-item"><span class="tool-name">tool_compare_strategies</span><span class="tool-desc">Bandingkan beberapa strategi</span></div>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -1225,61 +1370,82 @@ pre {
           <!-- ── AGENT EVAL ── -->
           <div id="agent-eval" style="display:none">
 
-            <!-- Token eval -->
-            <div class="step-block">
-              <div class="step-label">
-                <div class="step-num">🔑</div>
-                <h3>Bearer Token — Agent Evaluasi</h3>
-              </div>
-              <p>Token ini hanya memberi akses ke 5 read-only tools. Khusus untuk <code style="font-family:monospace;color:var(--accent);font-size:12px">agentfreqeval</code>. Server akan menolak (403) jika coba akses write tools.</p>
-              <div class="token-row">
-                <span class="token-val blurred" id="token-eval">ft-eval-rj5gp8bpzckw12gy46rj</span>
-                <button class="btn-icon" onclick="toggleBlur('token-eval')" title="Tampilkan token">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-                </button>
-                <button class="btn-copy" onclick="copyText('token-eval', this)">Copy</button>
+            <!-- Bearer Token -->
+            <div class="connect-section">
+              <div class="connect-card">
+                <div class="connect-card-header">
+                  <div class="connect-card-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                  </div>
+                  <span class="connect-card-title">Bearer Token</span>
+                  <span class="badge badge-accent connect-card-badge">agentfreqeval</span>
+                </div>
+                <div class="connect-card-body">
+                  <p>Token ini hanya memberi akses ke 5 read-only tools. Server akan menolak (HTTP 403) jika token ini mencoba memanggil write tools.</p>
+                  <div class="token-row">
+                    <span class="token-val blurred" id="token-eval">ft-eval-rj5gp8bpzckw12gy46rj</span>
+                    <button class="btn-icon" onclick="toggleBlur('token-eval')" title="Tampilkan / sembunyikan token">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                    </button>
+                    <button class="btn-copy" onclick="copyText('token-eval', this)">Copy</button>
+                  </div>
+                </div>
               </div>
             </div>
 
-            <!-- Step 1 eval: kirim YAML ke Telegram -->
-            <div class="step-block">
-              <div class="step-label">
-                <div class="step-num">1</div>
-                <h3>Kirim YAML ini ke Hermes via Telegram</h3>
-              </div>
-              <p>Copy seluruh blok YAML di bawah, lalu paste dan kirim ke chat <strong>agentfreqeval</strong> di Telegram.</p>
-              <div class="code-block">
-                <div class="code-head">
-                  <span class="code-lang">yaml — paste ke Telegram</span>
-                  <button class="btn-copy" onclick="copyText('yaml-eval', this)">Copy</button>
+            <!-- YAML Config -->
+            <div class="connect-section">
+              <div class="connect-card">
+                <div class="connect-card-header">
+                  <div class="connect-card-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                  </div>
+                  <span class="connect-card-title">Kirim YAML ke Hermes via Telegram</span>
                 </div>
-                <pre id="yaml-eval">mcp:
+                <div class="connect-card-body">
+                  <p>Copy seluruh blok YAML di bawah, paste dan kirim ke chat <strong>agentfreqeval</strong> di Telegram.</p>
+                  <div class="code-block">
+                    <div class="code-head">
+                      <span class="code-lang">yaml</span>
+                      <button class="btn-copy" onclick="copyText('yaml-eval', this)">Copy</button>
+                    </div>
+                    <pre id="yaml-eval">mcp:
   servers:
     freqtrade:
       type: sse
       url: https://trade.dennyardi.com/sse
       headers:
         Authorization: "Bearer ft-eval-rj5gp8bpzckw12gy46rj"</pre>
+                  </div>
+                </div>
               </div>
             </div>
 
-            <!-- Tools list eval -->
-            <div class="step-block">
-              <div class="step-label">
-                <div class="step-num">★</div>
-                <h3>5 Tools — Agent Evaluasi (Read-Only)</h3>
+            <!-- Tools list -->
+            <div class="connect-section">
+              <div class="connect-card">
+                <div class="connect-card-header">
+                  <div class="connect-card-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+                  </div>
+                  <span class="connect-card-title">5 Tools yang Tersedia</span>
+                  <span class="badge badge-info connect-card-badge">read-only</span>
+                </div>
+                <div class="connect-card-body">
+                  <div class="tools-panel" style="max-width:400px">
+                    <div class="tools-panel-header">Read-Only Tools</div>
+                    <div class="tool-item"><span class="tool-name">tool_list_strategies</span><span class="tool-desc">Daftar semua strategi</span></div>
+                    <div class="tool-item"><span class="tool-name">tool_get_backtest_results</span><span class="tool-desc">Ambil hasil backtest</span></div>
+                    <div class="tool-item"><span class="tool-name">tool_get_hyperopt_results</span><span class="tool-desc">Ambil hasil hyperopt terbaik</span></div>
+                    <div class="tool-item"><span class="tool-name">tool_get_performance_summary</span><span class="tool-desc">Analisis + verdict + rekomendasi</span></div>
+                    <div class="tool-item"><span class="tool-name">tool_compare_strategies</span><span class="tool-desc">Bandingkan beberapa strategi</span></div>
+                  </div>
+                  <div class="access-note">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                    Token ini akan ditolak server (HTTP 403) jika mencoba memanggil tool di luar daftar di atas.
+                  </div>
+                </div>
               </div>
-              <div class="tools-panel" style="max-width:420px">
-                <div class="tools-panel-header">📖 Read-Only Tools</div>
-                <div class="tool-item"><span class="tool-name">tool_list_strategies</span><span class="tool-desc">Daftar semua strategi</span></div>
-                <div class="tool-item"><span class="tool-name">tool_get_backtest_results</span><span class="tool-desc">Ambil hasil backtest</span></div>
-                <div class="tool-item"><span class="tool-name">tool_get_hyperopt_results</span><span class="tool-desc">Ambil hasil hyperopt terbaik</span></div>
-                <div class="tool-item"><span class="tool-name">tool_get_performance_summary</span><span class="tool-desc">Analisis + verdict + rekomendasi</span></div>
-                <div class="tool-item"><span class="tool-name">tool_compare_strategies</span><span class="tool-desc">Bandingkan beberapa strategi</span></div>
-              </div>
-              <p style="margin-top:12px;margin-left:0;color:var(--danger-text);font-size:12px">
-                ⚠️ Token ini akan ditolak (HTTP 403) jika mencoba memanggil tool di luar daftar ini.
-              </p>
             </div>
 
           </div><!-- /agent-eval -->
