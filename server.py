@@ -9,7 +9,6 @@ Dashboard: username+password login → returns MCP bearer token
 import json
 import os
 from pathlib import Path
-from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse, HTMLResponse
 from starlette.routing import Mount, Route
@@ -124,49 +123,81 @@ async def tool_compare_strategies(job_ids: list[str]) -> str:
 # ---------------------------------------------------------------------------
 PUBLIC_PATHS = {"/health", "/", "/api/login", "/overview", "/strategies", "/jobs", "/results", "/connect"}
 
-# SSE adalah streaming — middleware tidak boleh consume body-nya
-SSE_PATHS = {"/sse"}
+class BearerAuthMiddleware:
+    """
+    Pure ASGI middleware — tidak pakai BaseHTTPMiddleware agar tidak konflik
+    dengan SSE streaming response (tipe 'http.response.start' bukan 'http.response.body').
+    """
+    def __init__(self, app):
+        self.app = app
 
-class BearerAuthMiddleware(BaseHTTPMiddleware):
-    async def dispatch(self, request: Request, call_next):
-        path = request.url.path
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            # WebSocket / lifespan — langsung teruskan
+            await self.app(scope, receive, send)
+            return
+
+        path = scope.get("path", "")
 
         if path in PUBLIC_PATHS:
-            return await call_next(request)
+            await self.app(scope, receive, send)
+            return
 
-        auth = request.headers.get("Authorization", "")
+        # Ambil Authorization header
+        headers = dict(scope.get("headers", []))
+        auth = headers.get(b"authorization", b"").decode()
+
         if not auth.startswith("Bearer "):
-            return JSONResponse({"detail": "Unauthorized"}, status_code=401)
+            await self._reject(send, 401, "Unauthorized")
+            return
 
         token = auth[7:]
         allowed = TOKEN_PERMISSIONS.get(token)
         if allowed is None:
-            return JSONResponse({"detail": "Unauthorized"}, status_code=401)
+            await self._reject(send, 401, "Unauthorized")
+            return
 
-        # SSE connection: hanya validasi token, jangan consume body (itu stream)
-        if path in SSE_PATHS:
-            return await call_next(request)
+        # SSE: hanya cek token, jangan sentuh body/stream sama sekali
+        if path == "/sse":
+            await self.app(scope, receive, send)
+            return
 
-        # Tool-level enforcement hanya untuk POST /messages/
-        if path.startswith("/messages") and request.method == "POST":
+        # Tool-level enforcement untuk POST /messages/
+        if path.startswith("/messages") and scope.get("method", "GET") == "POST":
+            body_chunks = []
+            more_body = True
+            while more_body:
+                msg = await receive()
+                body_chunks.append(msg.get("body", b""))
+                more_body = msg.get("more_body", False)
+            body = b"".join(body_chunks)
+
             try:
-                body = await request.body()
                 data = json.loads(body)
                 if data.get("method") == "tools/call":
                     tool_name = data.get("params", {}).get("name", "")
                     if tool_name and tool_name not in allowed:
-                        return JSONResponse(
-                            {"detail": f"Tool '{tool_name}' not allowed for this token"},
-                            status_code=403,
-                        )
-                # Re-attach body agar bisa dibaca downstream
-                async def receive():
-                    return {"type": "http.request", "body": body, "more_body": False}
-                request._receive = receive
+                        await self._reject(send, 403, f"Tool '{tool_name}' not allowed for this token")
+                        return
             except Exception:
                 pass
 
-        return await call_next(request)
+            # Replay body ke downstream
+            async def replay_receive():
+                return {"type": "http.request", "body": body, "more_body": False}
+
+            await self.app(scope, replay_receive, send)
+            return
+
+        await self.app(scope, receive, send)
+
+    @staticmethod
+    async def _reject(send, status: int, detail: str):
+        body = json.dumps({"detail": detail}).encode()
+        await send({"type": "http.response.start", "status": status,
+                    "headers": [(b"content-type", b"application/json"),
+                                (b"content-length", str(len(body)).encode())]})
+        await send({"type": "http.response.body", "body": body, "more_body": False})
 
 # ---------------------------------------------------------------------------
 # Routes
@@ -198,7 +229,7 @@ async def api_login(request: Request):
 
 sse_app = mcp.sse_app(host="*")
 
-app = Starlette(
+_app = Starlette(
     routes=[
         Route("/health",    health),
         Route("/",          dashboard),
@@ -211,4 +242,5 @@ app = Starlette(
         Mount("/",          app=sse_app),
     ],
 )
-app.add_middleware(BearerAuthMiddleware)
+
+app = BearerAuthMiddleware(_app)
