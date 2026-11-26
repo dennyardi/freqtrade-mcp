@@ -49,7 +49,7 @@ def save_job(job) -> None:
             job.job_id,
             job.job_type,
             job.strategy_name,
-            str(job.status),
+            job.status.value if hasattr(job.status, 'value') else str(job.status),
             job.progress,
             json.dumps(job.result) if job.result is not None else None,
             job.error,
@@ -66,6 +66,10 @@ def load_all_jobs() -> list[dict]:
     result = []
     for row in rows:
         d = dict(row)
+        # Normalisasi nilai status lama yg tersimpan sebagai "JobStatus.COMPLETED"
+        status = d.get("status", "")
+        if "." in status:
+            d["status"] = status.split(".")[-1].lower()
         if d["result"]:
             try:
                 d["result"] = json.loads(d["result"])

@@ -124,9 +124,14 @@ async def tool_compare_strategies(job_ids: list[str]) -> str:
 # ---------------------------------------------------------------------------
 PUBLIC_PATHS = {"/health", "/", "/api/login", "/overview", "/strategies", "/jobs", "/results", "/connect"}
 
+# SSE adalah streaming — middleware tidak boleh consume body-nya
+SSE_PATHS = {"/sse"}
+
 class BearerAuthMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
-        if request.url.path in PUBLIC_PATHS:
+        path = request.url.path
+
+        if path in PUBLIC_PATHS:
             return await call_next(request)
 
         auth = request.headers.get("Authorization", "")
@@ -138,25 +143,28 @@ class BearerAuthMiddleware(BaseHTTPMiddleware):
         if allowed is None:
             return JSONResponse({"detail": "Unauthorized"}, status_code=401)
 
-        # Enforce tool-level permission untuk MCP tool calls
-        if request.url.path in ("/messages/", "/sse") or request.url.path.startswith("/messages"):
-            if request.method == "POST":
-                try:
-                    body = await request.body()
-                    data = json.loads(body)
-                    if data.get("method") == "tools/call":
-                        tool_name = data.get("params", {}).get("name", "")
-                        if tool_name and tool_name not in allowed:
-                            return JSONResponse(
-                                {"detail": f"Tool '{tool_name}' not allowed for this token"},
-                                status_code=403,
-                            )
-                    # Re-attach body agar bisa dibaca downstream
-                    async def receive():
-                        return {"type": "http.request", "body": body, "more_body": False}
-                    request._receive = receive
-                except Exception:
-                    pass
+        # SSE connection: hanya validasi token, jangan consume body (itu stream)
+        if path in SSE_PATHS:
+            return await call_next(request)
+
+        # Tool-level enforcement hanya untuk POST /messages/
+        if path.startswith("/messages") and request.method == "POST":
+            try:
+                body = await request.body()
+                data = json.loads(body)
+                if data.get("method") == "tools/call":
+                    tool_name = data.get("params", {}).get("name", "")
+                    if tool_name and tool_name not in allowed:
+                        return JSONResponse(
+                            {"detail": f"Tool '{tool_name}' not allowed for this token"},
+                            status_code=403,
+                        )
+                # Re-attach body agar bisa dibaca downstream
+                async def receive():
+                    return {"type": "http.request", "body": body, "more_body": False}
+                request._receive = receive
+            except Exception:
+                pass
 
         return await call_next(request)
 
