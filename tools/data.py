@@ -22,6 +22,7 @@ from tools.backtest import (
     check_pairs_for_mode,
     validate_trading_mode,
 )
+from tools.funding import download_funding, funding_status
 
 # Timerange opsional: YYYYMMDD-YYYYMMDD
 _SAFE_TIMERANGE = re.compile(r'^\d{8}-\d{8}$')
@@ -139,7 +140,13 @@ async def _run_download(pairs: list[str], timeframe: str, timerange: str,
     ]
     if trading_mode == "futures":
         # Data masuk ke user_data/data/binance/futures/ (OHLCV + mark + funding rate).
-        cmd += ["--trading-mode", "futures"]
+        # Candle types ditulis EKSPLISIT: funding_rate tidak boleh bergantung pada
+        # default freqtrade. Tanpa file funding, backtest futures tetap "berhasil"
+        # tetapi menghitung biaya pendanaan 0 (lihat tools/funding.py).
+        cmd += [
+            "--trading-mode", "futures",
+            "--candle-types", "futures", "mark", "funding_rate",
+        ]
     proc = await asyncio.create_subprocess_exec(
         *cmd,
         stdout=asyncio.subprocess.PIPE,
@@ -291,6 +298,33 @@ async def download_data(
 
     output = "\n".join(outputs)
 
+    # --- Funding rate (khusus futures) ---
+    # freqtrade hanya menulis WARNING `No history for ..., funding_rate ...` bila file
+    # funding tidak ada, lalu menghitung biaya pendanaan = 0 tanpa error. Jadi funding
+    # diperiksa eksplisit di sini: bila belum ada/tidak menutupi rentang, unduh sekali
+    # (candle-types funding_rate), lalu laporkan coverage-nya ke klien.
+    funding_info: dict[str, dict] = {}
+    funding_download: dict | None = None
+    funding_requested = timerange
+    if trading_mode == "futures":
+        fstatus = await funding_status(pairs, funding_requested)
+        if fstatus["data_missing"]:
+            funding_download = await download_funding(fstatus["missing_pairs"], funding_requested)
+            fstatus = await funding_status(pairs, funding_requested)
+        for pair in pairs:
+            finfo = fstatus["pairs"].get(pair, {})
+            funding_info[pair] = {
+                "funding_file": finfo.get("file"),
+                "funding_rows": finfo.get("rows", 0),
+                "funding_first": finfo.get("first"),
+                "funding_last": finfo.get("last"),
+                "funding_mean_rate": finfo.get("mean_rate"),
+                "funding_covers_requested_range": bool(
+                    finfo.get("covers_requested_start") and finfo.get("covers_requested_end")
+                ),
+                "funding_data_missing": bool(finfo.get("data_missing", True)),
+            }
+
     if any(rc != 0 for rc in returncodes):
         return {
             "success": False,
@@ -321,6 +355,7 @@ async def download_data(
                 "first_candle": None,
                 "last_candle": None,
                 "candles": 0,
+                **funding_info.get(pair, {}),
             }
             continue
 
@@ -346,6 +381,7 @@ async def download_data(
             "need_prepend": plan["need_prepend"],
             "covers_requested_start": covers_start,
             "covers_requested_end": covers_end,
+            **funding_info.get(pair, {}),
         }
 
         # Tidak ada candle yang terunduh padahal ada yang diminta → bukan sukses,
@@ -388,6 +424,11 @@ async def download_data(
             "timerange": timerange,
             "trading_mode": trading_mode,
             "coverage": coverage,
+            "funding": {
+                "data_missing": any(v.get("funding_data_missing", True) for v in funding_info.values()) if funding_info else None,
+                "download_attempted": funding_download is not None,
+                "pairs": funding_info,
+            },
             "log_tail": "\n".join(output.splitlines()[-20:]),
         }
 
@@ -402,6 +443,19 @@ async def download_data(
         "coverage": coverage,
         "message": f"Data downloaded for {len(success_pairs)} pair(s)",
     }
+    if funding_info:
+        result["funding"] = {
+            "data_missing": any(v.get("funding_data_missing", True) for v in funding_info.values()),
+            "download_attempted": funding_download is not None,
+            "pairs": funding_info,
+        }
+        if funding_download is not None:
+            result["funding"]["download"] = funding_download
+            if not funding_download.get("success"):
+                result["funding"]["warning"] = (
+                    "Unduhan funding_rate gagal; backtest futures untuk pair ini akan "
+                    "menghitung biaya pendanaan 0. " + str(funding_download.get("log_tail", ""))[-400:]
+                )
     if noprogress:
         result["warning"] = f"Tidak ada candle baru untuk: {noprogress}"
         result["no_new_data_pairs"] = noprogress

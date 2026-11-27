@@ -12,6 +12,7 @@ from contextlib import asynccontextmanager
 import json
 import logging
 import os
+import re
 import time
 import uuid
 from collections import defaultdict
@@ -30,6 +31,7 @@ from config import (
 from tools.jobs import bootstrap
 from tools.backtest import run_backtest, get_backtest_results
 from tools.data import download_data
+from tools.funding import get_funding_history
 from tools.evaluation import get_performance_summary, compare_strategies, list_strategies
 from tools.hyperopt import run_hyperopt, get_hyperopt_results
 from tools.jobs import get_job_status, cancel_job, list_jobs
@@ -272,6 +274,33 @@ async def tool_run_backtest(
         timeframe=timeframe, timerange=timerange, fee=fee,
         trading_mode=trading_mode, leverage=leverage,
     ), indent=2)
+
+@mcp.tool()
+async def tool_get_funding_history(
+    pair: str,
+    timerange: str | None = None,
+    limit: int = 200,
+) -> str:
+    """Funding-rate history for a futures pair (untuk riset carry / verifikasi biaya pendanaan).
+
+    pair: format futures BASE/QUOTE:SETTLE (contoh "BTC/USDT:USDT").
+    timerange: opsional YYYYMMDD atau YYYYMMDD-YYYYMMDD (batas akhir = 00:00 tanggal itu).
+    limit: jumlah baris terakhir yang dikembalikan (0 = tanpa baris, hanya ringkasan).
+
+    Membaca file funding_rate freqtrade (Binance mencatat funding tiap 8 jam, jadi
+    3 baris/hari). `annualized_mean_pct` = rata-rata funding × 3 × 365 (perkiraan
+    biaya carry long per tahun, sebelum tanda).
+    """
+    if err := _check_tool_permission("tool_get_funding_history"):
+        return json.dumps({"error": err})
+    from tools.backtest import _validate_pairs, check_pairs_for_mode
+    if _validate_pairs([pair]) is None:
+        return json.dumps({"error": "Format pair tidak valid. Gunakan BASE/QUOTE:SETTLE (contoh: BTC/USDT:USDT)"})
+    if (mode_err := check_pairs_for_mode([pair], "futures")) is not None:
+        return json.dumps({"error": mode_err})
+    if timerange is not None and not re.match(r'^\d{8}(-\d{8})?$', timerange):
+        return json.dumps({"error": "timerange harus format YYYYMMDD atau YYYYMMDD-YYYYMMDD"})
+    return json.dumps(await get_funding_history(pair=pair, timerange=timerange, limit=limit), indent=2)
 
 @mcp.tool()
 async def tool_run_hyperopt(
@@ -560,6 +589,7 @@ _TOOL_MAP = {
     "tool_run_backtest":            (run_backtest,             ["strategy_name", "pairs", "timeframe", "timerange", "fee", "trading_mode", "leverage"]),
     "tool_run_hyperopt":            (run_hyperopt,             ["strategy_name", "epochs", "spaces", "timerange", "pairs", "fee"]),
     "tool_download_data":           (download_data,            ["pairs", "timeframe", "days", "timerange", "full", "trading_mode"]),
+    "tool_get_funding_history":     (get_funding_history,      ["pair", "timerange", "limit"]),
     "tool_create_strategy":         (create_strategy,          ["name", "description", "timeframe"]),
     "tool_validate_strategy":       (validate_strategy,        ["strategy_name"]),
     "tool_write_strategy":          (write_strategy,           ["name", "code"]),

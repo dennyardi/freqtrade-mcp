@@ -48,6 +48,8 @@ def init_db() -> None:
             ("leverage_actual", "REAL"),
             ("trades_long", "INTEGER"),
             ("trades_short", "INTEGER"),
+            ("funding_data_missing", "INTEGER"),
+            ("funding", "TEXT"),
         ):
             if col not in cols:
                 con.execute(f"ALTER TABLE jobs ADD COLUMN {col} {typ}")
@@ -71,8 +73,8 @@ def _save_job_sync(job) -> None:
                 (job_id, job_type, strategy_name, status, progress,
                  result, error, created_at, finished_at, fee, fee_effective,
                  trading_mode, leverage, trading_mode_effective, leverage_actual,
-                 trades_long, trades_short)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 trades_long, trades_short, funding_data_missing, funding)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(job_id) DO UPDATE SET
                 status        = excluded.status,
                 progress      = excluded.progress,
@@ -86,7 +88,9 @@ def _save_job_sync(job) -> None:
                 trading_mode_effective = excluded.trading_mode_effective,
                 leverage_actual = excluded.leverage_actual,
                 trades_long   = excluded.trades_long,
-                trades_short  = excluded.trades_short
+                trades_short  = excluded.trades_short,
+                funding_data_missing = excluded.funding_data_missing,
+                funding       = excluded.funding
         """, (
             job.job_id,
             job.job_type,
@@ -105,6 +109,9 @@ def _save_job_sync(job) -> None:
             getattr(job, "leverage_actual", None),
             getattr(job, "trades_long", None),
             getattr(job, "trades_short", None),
+            None if getattr(job, "funding_data_missing", None) is None
+            else int(bool(job.funding_data_missing)),
+            json.dumps(getattr(job, "funding", None)) if getattr(job, "funding", None) is not None else None,
         ))
 
 
@@ -125,5 +132,12 @@ def load_all_jobs() -> list[dict]:
                 d["result"] = json.loads(d["result"])
             except Exception:
                 pass
+        if isinstance(d.get("funding"), str):
+            try:
+                d["funding"] = json.loads(d["funding"])
+            except Exception:
+                pass
+        if d.get("funding_data_missing") is not None:
+            d["funding_data_missing"] = bool(d["funding_data_missing"])
         result.append(d)
     return result

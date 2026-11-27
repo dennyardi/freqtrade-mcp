@@ -14,6 +14,7 @@ from pathlib import Path
 
 from config import FREQTRADE_BIN, USER_DATA_DIR, DEFAULT_EXCHANGE_CONFIG, RESULTS_DIR, STRATEGIES_DIR
 from tools.jobs import _jobs, Job, JobStatus
+from tools.funding import ensure_funding
 from tools.strategy import _validate_name
 
 # Whitelist timeframe yang diizinkan
@@ -312,6 +313,20 @@ async def _execute_backtest(job, pairs, timeframe, timerange, fee=None,
             job.error = f"Gagal membuat config futures sementara: {e}"
             job.persist()
             return
+        # Funding rate: backtest futures WAJIB punya data funding, karena freqtrade
+        # hanya menulis WARNING lalu memakai funding 0 bila filenya tidak ada
+        # (tidak error, profit jadi terlalu tinggi). Pastikan/unduh dulu, lalu
+        # catat statusnya di metadata job (funding_data_missing).
+        try:
+            job.funding = await ensure_funding(list(pairs or []), timerange)
+        except Exception as e:  # noqa: BLE001
+            job.funding = {
+                "data_missing": True,
+                "error": f"{e.__class__.__name__}: {e}",
+                "pairs": {},
+            }
+        job.funding_data_missing = bool(job.funding.get("data_missing"))
+        job.persist()
     if leverage > 1.0:
         try:
             run_strategy, wrapper_path = _write_leverage_wrapper(
@@ -462,11 +477,16 @@ async def _run_backtest_inner(job, pairs, timeframe, timerange, fee,
     job.trading_mode_effective = stats.get("trading_mode")
     job.leverage_actual = stats.get("leverage_max")
 
+    # Bukti funding: freqtrade tidak pernah menulis baris "funding" di log, jadi
+    # bukti nyata diambil dari artefak hasilnya (field `funding_fees` per trade).
+    funding_evidence = _funding_evidence(job, stats)
+    funding_line = funding_evidence.get("log_line")
+
     job.status   = JobStatus.COMPLETED
     job.progress = 100
     job.result   = {
         "result_file": str(result_path),
-        "log": combined[-2000:],
+        "log": combined[-2000:] + ("\n" + funding_line if funding_line else ""),
         "strategy_name": job.strategy_name,
         "strategy_run": run_strategy,
         "trading_mode": job.trading_mode,
@@ -477,6 +497,8 @@ async def _run_backtest_inner(job, pairs, timeframe, timerange, fee,
         "trades_short": job.trades_short,
         "fee": job.fee_effective,
         "fee_requested": job.fee,
+        "funding": funding_evidence,
+        "funding_data_missing": funding_evidence.get("data_missing"),
     }
     job.persist()
 
@@ -623,6 +645,65 @@ def _pct(value) -> float | None:
         return None
 
 
+def _funding_evidence(job, stats: dict) -> dict:
+    """Ringkasan bukti biaya pendanaan untuk job futures.
+
+    freqtrade tidak menulis satu baris log pun saat menerapkan funding; kalau data
+    funding tidak ada ia hanya menulis WARNING lalu memakai biaya pendanaan 0 (tanpa
+    error). Bukti yang dipakai di sini: field `funding_fees` per trade di artefak
+    hasil (angka dari freqtrade sendiri) + file funding_rate yang terbaca.
+    """
+    mode = (job.trading_mode or "spot").lower()
+    if mode != "futures":
+        return {"applicable": False, "reason": "spot: biaya pendanaan tidak berlaku"}
+
+    status = job.funding or {}
+    data_missing = bool(status.get("data_missing"))
+    pairs_data = status.get("pairs") or {}
+    total = stats.get("funding_fees_total")
+    n_trades = stats.get("trades_with_funding")
+
+    data_desc = "; ".join(
+        f"{pair} rows={(info or {}).get('funding_rows', (info or {}).get('rows'))} "
+        f"[{(info or {}).get('funding_first', (info or {}).get('first'))} -> "
+        f"{(info or {}).get('funding_last', (info or {}).get('last'))}]"
+        for pair, info in pairs_data.items()
+    ) or "tidak ada info data"
+
+    if data_missing:
+        reasons = status.get("missing_reasons") or {}
+        detail = "; ".join(f"{p}: {r}" for p, r in reasons.items()) or str(status.get("error") or "")
+        line = (
+            "funding: MISSING (funding_data_missing=true) - data funding_rate tidak "
+            f"tersedia ({detail or 'file tidak ada'}). freqtrade memakai biaya pendanaan 0, "
+            "jadi profit futures ini TIDAK memperhitungkan funding. Jalankan "
+            "tool_download_data dengan trading_mode='futures' lalu ulangi backtest."
+        )
+    elif total is None:
+        line = f"funding: data tersedia ({data_desc}) tetapi artefak hasil tidak memuat funding_fees"
+    elif abs(float(total)) > 0:
+        line = (
+            f"funding: applied {float(total):+.6f} USDT pada {n_trades} trade "
+            f"(field funding_fees artefak freqtrade) | data: {data_desc}"
+        )
+    else:
+        line = (
+            f"funding: 0.000000 USDT terpakai walau data ada ({data_desc}) - tidak ada "
+            "posisi yang melewati jam funding"
+        )
+
+    return {
+        "applicable": True,
+        "data_missing": data_missing,
+        "total_funding_fees": total,
+        "trades_with_funding": n_trades,
+        "download_attempted": bool(status.get("download_attempted")),
+        "pairs": pairs_data,
+        "missing_reasons": status.get("missing_reasons") or {},
+        "log_line": line,
+    }
+
+
 def _parse_result_file(result_path: Path, strategy_name: str) -> dict:
     """
     Parse file hasil backtest — support format .zip (Freqtrade 2024+) dan .json (lama).
@@ -688,6 +769,16 @@ def _parse_result_file(result_path: Path, strategy_name: str) -> dict:
         dd_account = m.get("max_drawdown_account")
         drawdown_pct = round(dd_account * 100, 4) if dd_account is not None else None
 
+        # Biaya pendanaan (futures): freqtrade menyimpan `funding_fees` per trade di
+        # artefak hasil, tapi tidak pernah menjumlahkannya di statistik strategi.
+        trades = m.get("trades") or []
+        funding_total = None
+        funding_trades = None
+        if isinstance(trades, list) and any("funding_fees" in t for t in trades):
+            fees = [float(t.get("funding_fees") or 0.0) for t in trades]
+            funding_total = round(sum(fees), 8)
+            funding_trades = sum(1 for f in fees if abs(f) > 0)
+
         summary[strat] = {
             "total_trades":      m.get("total_trades", 0),
             "wins":              wins,
@@ -713,6 +804,8 @@ def _parse_result_file(result_path: Path, strategy_name: str) -> dict:
             "trade_count_short": m.get("trade_count_short"),
             "profit_total_long_pct":  _pct(m.get("profit_total_long")),
             "profit_total_short_pct": _pct(m.get("profit_total_short")),
+            "funding_fees_total":     funding_total,
+            "trades_with_funding":    funding_trades,
             "leverage_max":      max(
                 (t.get("leverage") or 1.0 for t in (m.get("trades") or [])),
                 default=None,
@@ -795,6 +888,9 @@ async def get_backtest_results(job_id: str) -> dict:
             "trades_short": job.trades_short,
             "fee": job.fee_effective if job.fee_effective is not None else job.fee,
             "fee_requested": job.fee,
+            "funding": (job.result or {}).get("funding"),
+            "funding_data_missing": (job.result or {}).get("funding_data_missing",
+                                                          job.funding_data_missing),
         },
         "summary": summary,
         "fee": job.fee_effective if job.fee_effective is not None else job.fee,

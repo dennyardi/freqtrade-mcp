@@ -34,6 +34,8 @@ class Job:
     leverage_actual: Optional[float] = None        # leverage maksimum yang terpakai
     trades_long:   Optional[int] = None
     trades_short:  Optional[int] = None
+    funding:       Optional[dict] = None   # coverage/status data funding (futures)
+    funding_data_missing: Optional[bool] = None   # True bila funding rate tidak ada
     created_at:    str = field(default_factory=lambda: datetime.utcnow().isoformat())
     finished_at:   Optional[str] = None
     process:       Optional[asyncio.subprocess.Process] = None
@@ -55,6 +57,8 @@ class Job:
             "leverage_actual": self.leverage_actual,
             "trades_long":   self.trades_long,
             "trades_short":  self.trades_short,
+            "funding_data_missing": self.funding_data_missing,
+            "funding":       self.funding,
             "created_at":    self.created_at,
             "finished_at":   self.finished_at,
         }
@@ -99,6 +103,8 @@ def bootstrap() -> None:
             leverage_actual= row.get("leverage_actual"),
             trades_long=   row.get("trades_long"),
             trades_short=  row.get("trades_short"),
+            funding=       row.get("funding"),
+            funding_data_missing= row.get("funding_data_missing"),
             created_at=    row["created_at"],
             finished_at=   row["finished_at"],
         )

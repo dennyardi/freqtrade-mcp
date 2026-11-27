@@ -25,15 +25,15 @@ Freqtrade MCP Server (VPS Neva — trade.dennyardi.com)
 Freqtrade CLI (backtesting, hyperopt, download-data)
 ```
 
-## 12 MCP Tools
+## 16 MCP Tools
 
 ### Agent Pembuat Strategi
 | Tool | Deskripsi |
 |---|---|
 | `tool_create_strategy` | Generate file strategi dari deskripsi natural language |
 | `tool_validate_strategy` | Validasi strategi sebelum backtest |
-| `tool_download_data` | Download data historis OHLCV dari Binance |
-| `tool_run_backtest` | Jalankan backtest (async, return `job_id`). Arg `fee` (0-0.01, default 0.001 = 0.1%/sisi) override fee per run via flag `--fee`; config global tidak diubah |
+| `tool_download_data` | Download data historis OHLCV dari Binance. `trading_mode='futures'` mengunduh OHLCV + mark + **funding_rate** eksplisit (`--candle-types futures mark funding_rate`) dan mengembalikan `funding_rows`/`funding_first`/`funding_last` per pair di `coverage` |
+| `tool_run_backtest` | Jalankan backtest (async, return `job_id`). Arg `fee` (0-0.01, default 0.001 = 0.1%/sisi) override fee per run via flag `--fee`; config global tidak diubah. Untuk futures: funding rate dicek/diunduh lebih dulu, lalu metadata job memuat `funding.total_funding_fees`, `funding.trades_with_funding`, dan `funding_data_missing` |
 | `tool_run_hyperopt` | Optimasi parameter (async, return `job_id`). Arg `fee` sama seperti backtest |
 | `tool_get_job_status` | Poll status job |
 | `tool_cancel_job` | Batalkan job yang berjalan |
@@ -42,10 +42,26 @@ Freqtrade CLI (backtesting, hyperopt, download-data)
 | Tool | Deskripsi |
 |---|---|
 | `tool_list_strategies` | Daftar semua strategi yang tersedia |
-| `tool_get_backtest_results` | Ambil hasil backtest yang sudah selesai |
+| `tool_get_backtest_results` | Ambil hasil backtest yang sudah selesai (termasuk `funding_fees_total` per strategi) |
 | `tool_get_hyperopt_results` | Ambil parameter terbaik dari hyperopt |
 | `tool_get_performance_summary` | Analisis + verdict (PASS/OPTIMIZE/REJECT) + rekomendasi |
 | `tool_compare_strategies` | Bandingkan performa beberapa strategi side-by-side |
+| `tool_get_funding_history` | Riwayat funding rate satu pair futures (`pair`, `timerange`, `limit`) — dasar riset carry |
+
+### Funding rate (futures)
+
+freqtrade **tidak menulis baris log** saat menerapkan biaya pendanaan, dan bila file
+funding tidak ada ia hanya `WARNING - No history for <pair>, funding_rate, 1h found`
+lalu memakai funding **0** tanpa error. Karena itu server:
+
+1. mengunduh `funding_rate` eksplisit saat `tool_download_data` dengan `trading_mode='futures'`,
+   dan mengulang unduhan khusus funding (`--candle-types funding_rate`) bila file belum ada;
+2. sebelum backtest futures, memanggil `ensure_funding()` (auto-unduh sekali bila belum ada)
+   sehingga backtest tidak pernah diam-diam memakai funding 0;
+3. menempelkan baris `funding: applied ±X USDT ...` atau `funding: MISSING ...` di log job,
+   dan mengisi `funding_data_missing` (true/false) di metadata job;
+4. menjumlahkan `funding_fees` per trade dari artefak freqtrade menjadi `funding_fees_total`.
+
 
 ## Deployment
 
