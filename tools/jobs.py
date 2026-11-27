@@ -26,6 +26,8 @@ class Job:
     progress:      int = 0
     result:        Optional[Any] = None
     error:         Optional[str] = None
+    fee:           Optional[float] = None   # fee ratio yang diminta klien
+    fee_effective: Optional[float] = None   # fee yang benar-benar dipakai freqtrade
     created_at:    str = field(default_factory=lambda: datetime.utcnow().isoformat())
     finished_at:   Optional[str] = None
     process:       Optional[asyncio.subprocess.Process] = None
@@ -39,6 +41,8 @@ class Job:
             "progress":      self.progress,
             "result":        self.result,
             "error":         self.error,
+            "fee":           self.fee_effective if self.fee_effective is not None else self.fee,
+            "fee_requested": self.fee,
             "created_at":    self.created_at,
             "finished_at":   self.finished_at,
         }
@@ -75,6 +79,8 @@ def bootstrap() -> None:
             progress=      row["progress"],
             result=        row["result"],
             error=         error,
+            fee=           row.get("fee"),
+            fee_effective= row.get("fee_effective"),
             created_at=    row["created_at"],
             finished_at=   row["finished_at"],
         )

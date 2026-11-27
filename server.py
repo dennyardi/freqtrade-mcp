@@ -242,13 +242,18 @@ async def tool_run_backtest(
     pairs: list[str] | None = None,
     timeframe: str = "1h",
     timerange: str | None = None,
+    fee: float = 0.001,
 ) -> str:
-    """Run a Freqtrade backtest for a strategy. Returns job_id (async)."""
+    """Run a Freqtrade backtest for a strategy. Returns job_id (async).
+
+    fee: biaya per sisi sebagai rasio, 0-0.01, default 0.001 (0.1%). Override ini
+    hanya berlaku untuk run tersebut (flag --fee freqtrade), config global tidak diubah.
+    """
     if err := _check_tool_permission("tool_run_backtest"):
         return json.dumps({"error": err})
     return json.dumps(await run_backtest(
         strategy_name=strategy_name, pairs=pairs,
-        timeframe=timeframe, timerange=timerange,
+        timeframe=timeframe, timerange=timerange, fee=fee,
     ), indent=2)
 
 @mcp.tool()
@@ -258,13 +263,18 @@ async def tool_run_hyperopt(
     spaces: list[str] | None = None,
     timerange: str | None = None,
     pairs: list[str] | None = None,
+    fee: float = 0.001,
 ) -> str:
-    """Run Freqtrade hyperopt to optimise strategy parameters. Returns job_id (async)."""
+    """Run Freqtrade hyperopt to optimise strategy parameters. Returns job_id (async).
+
+    fee: biaya per sisi sebagai rasio, 0-0.01, default 0.001 (0.1%) — flag --fee,
+    config global tidak diubah.
+    """
     if err := _check_tool_permission("tool_run_hyperopt"):
         return json.dumps({"error": err})
     return json.dumps(await run_hyperopt(
         strategy_name=strategy_name, epochs=epochs,
-        spaces=spaces, timerange=timerange, pairs=pairs,
+        spaces=spaces, timerange=timerange, pairs=pairs, fee=fee,
     ), indent=2)
 
 @mcp.tool()
@@ -530,8 +540,8 @@ _TOOL_MAP = {
     "tool_get_hyperopt_results":    (get_hyperopt_results,     ["job_id"]),
     "tool_get_performance_summary": (get_performance_summary,  ["job_id"]),
     "tool_compare_strategies":      (compare_strategies,       ["job_ids"]),
-    "tool_run_backtest":            (run_backtest,             ["strategy_name", "pairs", "timeframe", "timerange"]),
-    "tool_run_hyperopt":            (run_hyperopt,             ["strategy_name", "epochs", "spaces", "timerange", "pairs"]),
+    "tool_run_backtest":            (run_backtest,             ["strategy_name", "pairs", "timeframe", "timerange", "fee"]),
+    "tool_run_hyperopt":            (run_hyperopt,             ["strategy_name", "epochs", "spaces", "timerange", "pairs", "fee"]),
     "tool_download_data":           (download_data,            ["pairs", "timeframe", "days", "timerange", "full"]),
     "tool_create_strategy":         (create_strategy,          ["name", "description", "timeframe"]),
     "tool_validate_strategy":       (validate_strategy,        ["strategy_name"]),

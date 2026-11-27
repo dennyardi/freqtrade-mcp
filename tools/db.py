@@ -35,6 +35,11 @@ def init_db() -> None:
                 finished_at   TEXT
             )
         """)
+        # Migrasi ringan: kolom fee (requested) & fee_effective untuk DB lama.
+        cols = {r["name"] for r in con.execute("PRAGMA table_info(jobs)")}
+        for col in ("fee", "fee_effective"):
+            if col not in cols:
+                con.execute(f"ALTER TABLE jobs ADD COLUMN {col} REAL")
 
 
 async def save_job_async(job) -> None:
@@ -53,14 +58,16 @@ def _save_job_sync(job) -> None:
         con.execute("""
             INSERT INTO jobs
                 (job_id, job_type, strategy_name, status, progress,
-                 result, error, created_at, finished_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 result, error, created_at, finished_at, fee, fee_effective)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(job_id) DO UPDATE SET
-                status       = excluded.status,
-                progress     = excluded.progress,
-                result       = excluded.result,
-                error        = excluded.error,
-                finished_at  = excluded.finished_at
+                status        = excluded.status,
+                progress      = excluded.progress,
+                result        = excluded.result,
+                error         = excluded.error,
+                finished_at   = excluded.finished_at,
+                fee           = excluded.fee,
+                fee_effective = excluded.fee_effective
         """, (
             job.job_id,
             job.job_type,
@@ -71,6 +78,8 @@ def _save_job_sync(job) -> None:
             job.error,
             job.created_at,
             job.finished_at,
+            job.fee,
+            job.fee_effective,
         ))
 
 

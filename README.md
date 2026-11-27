@@ -33,8 +33,8 @@ Freqtrade CLI (backtesting, hyperopt, download-data)
 | `tool_create_strategy` | Generate file strategi dari deskripsi natural language |
 | `tool_validate_strategy` | Validasi strategi sebelum backtest |
 | `tool_download_data` | Download data historis OHLCV dari Binance |
-| `tool_run_backtest` | Jalankan backtest (async, return `job_id`) |
-| `tool_run_hyperopt` | Optimasi parameter (async, return `job_id`) |
+| `tool_run_backtest` | Jalankan backtest (async, return `job_id`). Arg `fee` (0-0.01, default 0.001 = 0.1%/sisi) override fee per run via flag `--fee`; config global tidak diubah |
+| `tool_run_hyperopt` | Optimasi parameter (async, return `job_id`). Arg `fee` sama seperti backtest |
 | `tool_get_job_status` | Poll status job |
 | `tool_cancel_job` | Batalkan job yang berjalan |
 

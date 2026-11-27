@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import math
 import re
 import time
 import uuid
@@ -31,16 +32,69 @@ def _validate_pairs(pairs: list[str]) -> list[str] | None:
     return pairs
 
 
+# ---------------------------------------------------------------------------
+# Fee (biaya per sisi). Freqtrade memakai rasio: 0.001 = 0.1% per sisi.
+# Default server = 0.001, identik dengan perilaku sebelum parameter ini ada
+# (tanpa --fee freqtrade memakai "worst case fee from exchange" = 0.1000%).
+# ---------------------------------------------------------------------------
+FEE_MIN = 0.0
+FEE_MAX = 0.01
+FEE_DEFAULT = 0.001
+
+_FEE_LOG_RE = re.compile(r"Using fee\s+([0-9.]+)%")
+
+
+def validate_fee(fee) -> str | None:
+    """Return pesan error bila fee tidak valid, None bila OK."""
+    if fee is None:
+        return None
+    if isinstance(fee, bool) or not isinstance(fee, (int, float)):
+        return (
+            f"fee harus angka (float) antara {FEE_MIN} dan {FEE_MAX}, "
+            f"bukan {type(fee).__name__}."
+        )
+    if not math.isfinite(fee):
+        return f"fee harus angka finite, bukan {fee}."
+    if fee < FEE_MIN or fee > FEE_MAX:
+        return (
+            f"fee={fee} di luar rentang yang diizinkan ({FEE_MIN}-{FEE_MAX} = 0%-1% per sisi). "
+            "Contoh valid: 0.001 (0.1%, default) atau 0.0005 (0.05%)."
+        )
+    return None
+
+
+def fee_to_arg(fee: float) -> str:
+    """Format fee untuk --fee tanpa kehilangan presisi (0.0005 tetap 0.0005)."""
+    return repr(float(fee))
+
+
+def parse_effective_fee(log: str) -> float | None:
+    """Ambil fee yang benar-benar dipakai freqtrade dari log-nya.
+
+    Baris log: 'Using fee 0.1000% from config.' → 0.001
+    """
+    matches = _FEE_LOG_RE.findall(log or "")
+    if not matches:
+        return None
+    try:
+        return round(float(matches[-1]) / 100, 10)
+    except Exception:
+        return None
+
+
 async def run_backtest(
     strategy_name: str,
     pairs: list[str] | None = None,
     timeframe: str = "1h",
     timerange: str | None = None,
+    fee: float | None = FEE_DEFAULT,
 ) -> dict:
     if not _validate_name(strategy_name):
         return {"error": f"Strategy name tidak valid: {strategy_name}"}
     if timeframe not in _VALID_TIMEFRAMES:
         return {"error": f"Timeframe tidak valid: {timeframe}"}
+    if (fee_err := validate_fee(fee)) is not None:
+        return {"error": fee_err}
 
     # B-05: pairs kosong diam-diam pakai pairlist config → tolak eksplisit
     if pairs is not None and len(pairs) == 0:
@@ -56,14 +110,20 @@ async def run_backtest(
         return {"error": f"Strategy '{strategy_name}' tidak ditemukan. Jalankan tool_list_strategies untuk melihat daftar yang tersedia."}
 
     job_id = uuid.uuid4().hex[:12]
-    job = Job(job_id=job_id, job_type="backtest", strategy_name=strategy_name)
+    job = Job(job_id=job_id, job_type="backtest", strategy_name=strategy_name,
+              fee=fee, fee_effective=None)
     _jobs[job_id] = job
     job.persist()
-    asyncio.create_task(_execute_backtest(job, pairs, timeframe, timerange))
-    return {"job_id": job_id, "status": "pending", "message": "Backtest queued"}
+    asyncio.create_task(_execute_backtest(job, pairs, timeframe, timerange, fee))
+    return {
+        "job_id": job_id,
+        "status": "pending",
+        "message": f"Backtest queued (fee={fee})",
+        "fee": fee,
+    }
 
 
-async def _execute_backtest(job, pairs, timeframe, timerange):
+async def _execute_backtest(job, pairs, timeframe, timerange, fee=None):
     job.status = JobStatus.RUNNING
     job.persist()
 
@@ -89,6 +149,9 @@ async def _execute_backtest(job, pairs, timeframe, timerange):
         cmd += ["--pairs"] + pairs
     if timerange:
         cmd += ["--timerange", timerange]
+    # Fee override per run — tidak menyentuh config global.
+    if fee is not None:
+        cmd += ["--fee", fee_to_arg(fee)]
 
     proc = await asyncio.create_subprocess_exec(
         *cmd,
@@ -121,6 +184,8 @@ async def _execute_backtest(job, pairs, timeframe, timerange):
 
     combined = "".join(stdout_lines) + "".join(stderr_lines)
     job.finished_at = datetime.utcnow().isoformat()
+    # Fee yang benar-benar dipakai freqtrade (dari log "Using fee X%") — jejak audit.
+    job.fee_effective = parse_effective_fee(combined) or job.fee
 
     if proc.returncode != 0:
         job.status = JobStatus.FAILED
@@ -150,6 +215,8 @@ async def _execute_backtest(job, pairs, timeframe, timerange):
         "result_file": str(result_path),
         "log": combined[-2000:],
         "strategy_name": job.strategy_name,
+        "fee": job.fee_effective,
+        "fee_requested": job.fee,
     }
     job.persist()
 
@@ -355,4 +422,10 @@ async def get_backtest_results(job_id: str) -> dict:
             "raw_file": str(result_path),
         }
 
-    return {"job_id": job_id, "summary": summary, "raw_file": str(result_path)}
+    return {
+        "job_id": job_id,
+        "summary": summary,
+        "fee": job.fee_effective if job.fee_effective is not None else job.fee,
+        "fee_requested": job.fee,
+        "raw_file": str(result_path),
+    }
