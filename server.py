@@ -229,11 +229,12 @@ async def tool_download_data(
     timeframe: str = "1h",
     days: int | None = None,
     timerange: str | None = None,
+    full: bool = False,
 ) -> str:
-    """Download historical OHLCV data from Binance. Use timerange (YYYYMMDD-YYYYMMDD) for precision or days (1-3650) for relative lookback."""
+    """Download historical OHLCV data from Binance. Use timerange (YYYYMMDD-YYYYMMDD) for precision or days (1-N) for relative lookback. When the requested start is earlier than local data, the server adds --prepend automatically. full=true re-downloads with --erase."""
     if err := _check_tool_permission("tool_download_data"):
         return json.dumps({"error": err})
-    return json.dumps(await download_data(pairs=pairs, timeframe=timeframe, days=days, timerange=timerange), indent=2)
+    return json.dumps(await download_data(pairs=pairs, timeframe=timeframe, days=days, timerange=timerange, full=full), indent=2)
 
 @mcp.tool()
 async def tool_run_backtest(
@@ -523,7 +524,7 @@ _TOOL_MAP = {
     "tool_compare_strategies":      (compare_strategies,       ["job_ids"]),
     "tool_run_backtest":            (run_backtest,             ["strategy_name", "pairs", "timeframe", "timerange"]),
     "tool_run_hyperopt":            (run_hyperopt,             ["strategy_name", "epochs", "spaces", "timerange", "pairs"]),
-    "tool_download_data":           (download_data,            ["pairs", "timeframe", "days", "timerange"]),
+    "tool_download_data":           (download_data,            ["pairs", "timeframe", "days", "timerange", "full"]),
     "tool_create_strategy":         (create_strategy,          ["name", "description", "timeframe"]),
     "tool_validate_strategy":       (validate_strategy,        ["strategy_name"]),
     "tool_write_strategy":          (write_strategy,           ["name", "code"]),
