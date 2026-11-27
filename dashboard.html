@@ -841,6 +841,33 @@ aside.collapsed .btn-logout span { display: none; }
 .btn-copy:hover { border-color: var(--accent); color: var(--accent); }
 .btn-copy.copied { border-color: var(--success-text); color: var(--success-text); }
 
+/* ── Paging ─────────────────────────────────────────────────────────── */
+.paging {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 16px;
+  border-top: 1px solid var(--border);
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.paging-info {
+  font-size: 12px; color: var(--text-secondary);
+  white-space: nowrap;
+}
+.paging-btns { display: flex; gap: 4px; }
+.pg-btn {
+  min-width: 30px; height: 28px; padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  background: none;
+  color: var(--text-secondary);
+  font-size: 12px; font-weight: 500;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s, color 0.15s;
+}
+.pg-btn:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); background: var(--accent-tint); }
+.pg-btn.active { border-color: var(--accent); background: var(--accent); color: #fff; }
+.pg-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+
 pre {
   padding: 12px 14px;
   font-family: "JetBrains Mono", "SFMono-Regular", "Courier New", monospace;
@@ -1194,6 +1221,10 @@ pre {
             <div class="skel-row"><div class="skeleton skel-line" style="width:40%"></div></div>
             <div class="skel-row"><div class="skeleton skel-line" style="width:65%"></div></div>
           </div>
+          <div class="paging" id="paging-strats" style="display:none">
+            <span class="paging-info" id="paging-strats-info"></span>
+            <div class="paging-btns" id="paging-strats-btns"></div>
+          </div>
         </div>
       </div>
 
@@ -1211,6 +1242,10 @@ pre {
               <div class="empty-sub">Job backtest dan hyperopt akan muncul di sini</div>
             </div>
           </div>
+          <div class="paging" id="paging-jobs" style="display:none">
+            <span class="paging-info" id="paging-jobs-info"></span>
+            <div class="paging-btns" id="paging-jobs-btns"></div>
+          </div>
         </div>
       </div>
 
@@ -1227,6 +1262,10 @@ pre {
               <div class="empty-title">Belum ada hasil backtest</div>
               <div class="empty-sub">Selesaikan backtest job terlebih dahulu</div>
             </div>
+          </div>
+          <div class="paging" id="paging-results" style="display:none">
+            <span class="paging-info" id="paging-results-info"></span>
+            <div class="paging-btns" id="paging-results-btns"></div>
           </div>
         </div>
       </div>
@@ -1465,6 +1504,12 @@ let resultsList = [];
 let countdown = 15;
 let timer;
 let currentPage = 'dashboard';
+
+// State paging per halaman (page index berbasis 0)
+const PAGE_SIZE = { strats: 15, jobs: 10, results: 10 };
+const pgState   = { strats: 0, jobs: 0, results: 0 };
+// Cache data terakhir untuk re-render paging tanpa re-fetch
+let _strasList  = [];   // array string nama strategy
 
 /* ── Theme ──────────────────────────────────────────────────────────── */
 function applyTheme(dark) {
@@ -1849,7 +1894,7 @@ async function refreshAll() {
     document.getElementById('badge-strats').textContent  = sc;
     document.getElementById('badge-strats2').textContent = sc;
     document.getElementById('overview-strats').innerHTML  = stratHTML(strats.strategies?.slice(0, 6));
-    document.getElementById('all-strats-list').innerHTML  = stratHTML(strats.strategies);
+    renderPagedStrats(strats.strategies || []);
   } catch { setStatus(false); }
 
   for (const [id, job] of Object.entries(jobsMap)) {
@@ -1887,8 +1932,12 @@ async function fetchResult(jobId, stratName) {
   } catch {}
 }
 
+// Cache list jobs terakhir untuk re-render paging dari handler global
+let _allJobsList = [];
+
 function renderAllJobs() {
   const all    = Object.values(jobsMap).sort((a,b) => new Date(b.created_at) - new Date(a.created_at));
+  _allJobsList = all;
   const active = all.filter(j => ['pending','running'].includes(j.status));
   const done   = all.filter(j => j.status === 'completed');
   const failed = all.filter(j => j.status === 'failed');
@@ -1900,15 +1949,90 @@ function renderAllJobs() {
   document.getElementById('badge-jobs2').textContent = all.length;
 
   document.getElementById('overview-jobs').innerHTML = jobsHTML(active.slice(0, 4));
-  document.getElementById('all-jobs-list').innerHTML = jobsHTML(all);
+  renderPagedJobs(all);
+}
+
+function pgGoJobs(pg)    { pgState.jobs = pg;    renderPagedJobs(_allJobsList); }
+function pgGoResults(pg) { pgState.results = pg; renderPagedResults(resultsList); }
+function pgGoStrats(pg)  { pgState.strats = pg;  renderPagedStrats(_strasList); }
+
+function renderPagedJobs(all) {
+  const ps    = PAGE_SIZE.jobs;
+  const pg    = pgState.jobs;
+  const total = all.length;
+  const slice = all.slice(pg * ps, pg * ps + ps);
+  document.getElementById('all-jobs-list').innerHTML = jobsHTML(slice);
+  renderPaging('jobs', total, ps, pg, 'pgGoJobs');
 }
 
 function renderAllResults() {
   document.getElementById('badge-results').textContent  = resultsList.length;
   document.getElementById('badge-results2').textContent = resultsList.length;
   document.getElementById('overview-results').innerHTML = resultsTableHTML(resultsList.slice(0, 5));
-  document.getElementById('all-results-table').innerHTML = resultsTableHTML(resultsList);
+  renderPagedResults(resultsList);
 }
+
+function renderPagedResults(list) {
+  const ps    = PAGE_SIZE.results;
+  const pg    = pgState.results;
+  const sorted = [...list].sort((a, b) => (b.sharpe ?? -99) - (a.sharpe ?? -99));
+  const total  = sorted.length;
+  const slice  = sorted.slice(pg * ps, pg * ps + ps);
+  document.getElementById('all-results-table').innerHTML = resultsTableHTML(slice);
+  renderPaging('results', total, ps, pg, 'pgGoResults');
+}
+
+function renderPagedStrats(list) {
+  _strasList = list;
+  const ps    = PAGE_SIZE.strats;
+  const pg    = pgState.strats;
+  const total = list.length;
+  const slice = list.slice(pg * ps, pg * ps + ps);
+  document.getElementById('all-strats-list').innerHTML = stratHTML(slice);
+  renderPaging('strats', total, ps, pg, 'pgGoStrats');
+}
+
+/* ── Helper: render kontrol paging ──────────────────────────────────── */
+function renderPaging(key, total, ps, currentPg, onChangeFnName) {
+  const totalPages = Math.ceil(total / ps);
+  const wrap  = document.getElementById('paging-' + key);
+  const info  = document.getElementById('paging-' + key + '-info');
+  const btns  = document.getElementById('paging-' + key + '-btns');
+
+  if (!wrap) return;
+  if (totalPages <= 1) { wrap.style.display = 'none'; return; }
+
+  wrap.style.display = 'flex';
+  const from = currentPg * ps + 1;
+  const to   = Math.min(currentPg * ps + ps, total);
+  info.textContent = `${from}–${to} dari ${total}`;
+
+  // Tombol: Prev · 1 2 … n · Next (max 7 tombol nomor)
+  const pages = [];
+  if (totalPages <= 7) {
+    for (let i = 0; i < totalPages; i++) pages.push(i);
+  } else {
+    pages.push(0);
+    if (currentPg > 2) pages.push('…');
+    for (let i = Math.max(1, currentPg - 1); i <= Math.min(totalPages - 2, currentPg + 1); i++) pages.push(i);
+    if (currentPg < totalPages - 3) pages.push('…');
+    pages.push(totalPages - 1);
+  }
+
+  let html = `<button class="pg-btn" ${currentPg === 0 ? 'disabled' : ''} onclick="${onChangeFnName}(${currentPg - 1})">‹</button>`;
+  for (const p of pages) {
+    if (p === '…') {
+      html += `<button class="pg-btn" disabled>…</button>`;
+    } else {
+      html += `<button class="pg-btn ${p === currentPg ? 'active' : ''}" onclick="${onChangeFnName}(${p})">${p + 1}</button>`;
+    }
+  }
+  html += `<button class="pg-btn" ${currentPg >= totalPages - 1 ? 'disabled' : ''} onclick="${onChangeFnName}(${currentPg + 1})">›</button>`;
+  btns.innerHTML = html;
+}
+
+// Handler global paging — dipanggil dari onclick HTML yang di-generate
+// (definisi ada di atas bersama renderAllJobs)
 
 function startRefresh() {
   refreshAll();
