@@ -336,11 +336,10 @@ async def _run_backtest_inner(job, pairs, timeframe, timerange, fee,
     backtest_dir = Path(USER_DATA_DIR) / "backtest_results"
     backtest_dir.mkdir(parents=True, exist_ok=True)
 
-    # F-2: snapshot mtime semua file yang ada sebelum proses mulai
-    before_files: set[Path] = set(backtest_dir.glob("*.zip")) | set(
-        f for f in backtest_dir.glob("*.json") if not f.name.startswith(".")
-    )
-    job_start_mtime = time.monotonic()
+    # F-6: snapshot nama file hasil SEBELUM proses mulai. Artefak job ini = file
+    # yang tidak ada di snapshot ini (bukan "file termuda di direktori").
+    before_files = _result_file_snapshot(backtest_dir)
+    started_epoch = time.time()
 
     cmd = [
         FREQTRADE_BIN, "backtesting",
@@ -403,18 +402,42 @@ async def _run_backtest_inner(job, pairs, timeframe, timerange, fee,
         job.persist()
         return
 
-    # F-2: Ambil file result dari daftar file yang ada SEBELUM backtest dijalankan,
-    # dan bandingkan dengan yang ada SETELAH — file baru = milik job ini.
-    # Fallback ke meta.json lookup jika timestamp approach tidak bisa.
-    result_path = _find_new_result_file(job.strategy_name, started_at=job_start_mtime,
-                                        aliases=[run_strategy])
+    # F-6a: exit code 0 TIDAK membuktikan backtest berhasil. freqtrade/main.py
+    # menangkap ConfigurationError, menulis "ERROR - Configuration error: ..." lalu
+    # sys.exit(0) tanpa mengeset return_code (except ConfigurationError: hanya
+    # logger.error), jadi kegagalan config harus dideteksi dari log.
+    log_failure = _detect_log_failure(combined)
+    if log_failure:
+        job.status = JobStatus.FAILED
+        job.error  = (
+            "Backtest gagal walau exit code 0 (log freqtrade memuat error):\n"
+            + log_failure
+        )
+        job.persist()
+        return
 
-    # F-5: completed tanpa artefak = sebenarnya failed
+    # F-6b: artefak hasil harus benar-benar milik job ini — file yang BARU muncul
+    # sejak snapshot, mtime setelah job start, dan nama strategi di dalamnya cocok.
+    # Tidak ada fallback ke "file terbaru" milik job lain.
+    result_path, artifact_err = _resolve_job_artifact(
+        backtest_dir, before_files,
+        names=[job.strategy_name, run_strategy],
+        started_epoch=started_epoch,
+    )
+    if artifact_err:
+        job.status = JobStatus.FAILED
+        job.error  = artifact_err
+        job.persist()
+        return
+
+    # F-5: completed tanpa artefak sendiri = sebenarnya failed
     if not result_path:
         job.status = JobStatus.FAILED
         job.error  = (
-            "Backtest selesai (exit 0) tapi tidak ada file hasil yang bisa ditemukan. "
-            "Kemungkinan tidak ada candle untuk timerange/pair yang diminta.\n"
+            "Backtest selesai (exit 0) tapi tidak ada file hasil BARU untuk job ini di "
+            f"{backtest_dir}. Tidak ada fallback ke file milik job lain, jadi hasil "
+            "tidak bisa diambil. Kemungkinan tidak ada candle untuk timerange/pair "
+            "yang diminta.\n"
             + combined[-3000:]
         )
         job.persist()
@@ -422,6 +445,17 @@ async def _run_backtest_inner(job, pairs, timeframe, timerange, fee,
 
     # Metadata hasil (audit): mode/margin/leverage aktual + jumlah trade per sisi.
     summary = _parse_result_file(result_path, job.strategy_name) or {}
+
+    # F-6c: cross-check ringan — strategi di artefak harus strategi job ini.
+    if not (set(summary) & {job.strategy_name, run_strategy}):
+        job.status = JobStatus.FAILED
+        job.error  = (
+            f"artifact mismatch: {result_path.name} memuat strategi {sorted(summary) or 'tidak dikenal'}, "
+            f"sedangkan job {job.job_id} untuk '{job.strategy_name}'. Hasil tidak dipakai."
+        )
+        job.persist()
+        return
+
     stats = next(iter(summary.values()), {})
     job.trades_long  = stats.get("trade_count_long")
     job.trades_short = stats.get("trade_count_short")
@@ -447,77 +481,136 @@ async def _run_backtest_inner(job, pairs, timeframe, timerange, fee,
     job.persist()
 
 
-def _find_new_result_file(strategy_name: str, started_at: float,
-                          aliases: list[str] | None = None) -> Path | None:
-    """
-    F-2: Cari file hasil yang BARU muncul setelah backtest dimulai.
-    Prioritas: .zip yang muncul setelah `started_at`, cocok strategy_name via meta.json.
-    Fallback: .zip terbaru setelah started_at tanpa cek strategy (1 job aktif sekaligus).
-    Fallback terakhir: meta.json lookup (backward compat).
-    """
-    backtest_dir = Path(USER_DATA_DIR) / "backtest_results"
-    now = time.time()
-    # started_at adalah monotonic, ubah ke epoch approx (hanya untuk estimasi window)
-    # Gunakan wall-clock cutoff: file yang mtime-nya setelah proses kira-kira mulai
-    cutoff_epoch = now - (time.monotonic() - started_at) - 5  # +5 detik toleransi
+# ---------------------------------------------------------------------------
+# F-6: deteksi kegagalan dari log + resolusi artefak yang ketat.
+# ---------------------------------------------------------------------------
 
-    new_zips = [
-        f for f in backtest_dir.glob("*.zip")
-        if f.stat().st_mtime >= cutoff_epoch
-    ]
-    new_zips.sort(key=lambda f: f.stat().st_mtime, reverse=True)
+# Pola kegagalan freqtrade di log. "ERROR -" dipakai luas oleh freqtrade untuk
+# kegagalan yang tidak menaikkan exit code (lihat _detect_log_failure).
+_FAILURE_LOG_PATTERNS = (
+    re.compile(r"Configuration error"),
+    re.compile(r"Traceback \(most recent call last\)"),
+    re.compile(r"\s-\sERROR\s-\s"),
+    re.compile(r"Fatal exception!"),
+    re.compile(r"OperationalException"),
+    re.compile(r"No data found\. Terminating"),
+)
 
-    # Prioritas: zip baru yang meta.json-nya memuat strategy_name (atau alias wrapper leverage)
-    wanted = {strategy_name, *(aliases or [])}
-    for candidate in new_zips:
-        meta_path = candidate.with_suffix(".meta.json")
-        if meta_path.exists():
+
+def _detect_log_failure(log: str) -> str | None:
+    """Kembalikan kutipan error dari log freqtrade, None bila log bersih.
+
+    Wajib ada karena freqtrade/main.py menangani `ConfigurationError` dengan
+    `logger.error("Configuration error: ...")` tanpa mengeset return_code,
+    sehingga proses keluar dengan status 0 meski backtest tidak pernah jalan.
+    """
+    if not log:
+        return None
+    lines = log.splitlines()
+    for idx, line in enumerate(lines):
+        if any(p.search(line) for p in _FAILURE_LOG_PATTERNS):
+            excerpt = [line.strip()]
+            for nxt in lines[idx + 1: idx + 12]:
+                if not nxt.strip():
+                    break
+                excerpt.append(nxt.strip())
+            return "\n".join(excerpt)[:1500]
+    return None
+
+
+def _result_file_snapshot(backtest_dir: Path) -> dict[str, float]:
+    """Snapshot nama file hasil (.zip/.json) + mtime sebelum job dijalankan."""
+    snapshot: dict[str, float] = {}
+    for pattern in ("*.zip", "*.json"):
+        for f in backtest_dir.glob(pattern):
+            if f.name.startswith("."):
+                continue
             try:
-                meta = json.loads(meta_path.read_text())
-                if wanted & set(meta):
-                    return candidate
-            except Exception:
-                pass
-
-    # Fallback: zip baru paling muda (1 job aktif per waktu)
-    if new_zips:
-        return new_zips[0]
-
-    # Fallback terakhir: cari semua zip dengan meta.json
-    return _find_latest_result_file(strategy_name, suffix=".zip") or \
-           _find_latest_result_file(strategy_name, suffix=".json")
+                snapshot[f.name] = f.stat().st_mtime
+            except OSError:
+                continue
+    return snapshot
 
 
-def _find_latest_result_file(strategy_name: str, suffix: str) -> Path | None:
-    """Cari file hasil backtest terbaru untuk strategy tertentu."""
-    backtest_dir = Path(USER_DATA_DIR) / "backtest_results"
-    # Cari berdasarkan meta.json yang berisi nama strategy
-    if suffix == ".zip":
-        candidates = sorted(backtest_dir.glob("*.zip"), key=lambda f: f.stat().st_mtime, reverse=True)
-        for candidate in candidates:
-            meta_path = candidate.with_suffix(".meta.json")
-            if meta_path.exists():
-                try:
-                    meta = json.loads(meta_path.read_text())
-                    if strategy_name in meta:
-                        return candidate
-                except Exception:
-                    pass
-        # Fallback: file zip terbaru
-        return candidates[0] if candidates else None
-    else:
-        candidates = sorted(
-            [f for f in backtest_dir.glob("*.json") if not f.name.startswith(".")],
-            key=lambda f: f.stat().st_mtime, reverse=True
+def _artifact_strategies(path: Path) -> set[str] | None:
+    """Nama strategi yang termuat di artefak hasil (dari meta.json atau isi zip)."""
+    meta_path = path.with_suffix(".meta.json")
+    if meta_path.exists():
+        try:
+            meta = json.loads(meta_path.read_text())
+            if isinstance(meta, dict) and meta:
+                return set(meta)
+        except Exception:
+            pass
+    if path.suffix == ".zip":
+        try:
+            with zipfile.ZipFile(path) as zf:
+                for name in zf.namelist():
+                    if (name.endswith(".json") and "trade" not in name.lower()
+                            and "metadata" not in name.lower()):
+                        try:
+                            data = json.loads(zf.read(name))
+                        except Exception:
+                            continue
+                        if isinstance(data, dict) and isinstance(data.get("strategy"), dict):
+                            return set(data["strategy"])
+        except Exception:
+            return None
+        return None
+    try:
+        data = json.loads(path.read_text())
+    except Exception:
+        return None
+    if isinstance(data, dict) and isinstance(data.get("strategy"), dict):
+        return set(data["strategy"])
+    return None
+
+
+def _resolve_job_artifact(backtest_dir: Path, before: dict[str, float],
+                          names: list[str], started_epoch: float
+                          ) -> tuple[Path | None, str | None]:
+    """Cari artefak hasil milik job ini. Return (path, pesan_error).
+
+    Aturan (tidak ada fallback ke file terbaru milik job lain):
+      - file harus BARU (tidak ada di snapshot `before`),
+      - mtime tidak lebih awal dari job start (toleransi 2s untuk clock),
+      - meta.json/isi artefak harus memuat salah satu nama di `names`.
+    File baru yang strateginya tidak cocok → error `artifact mismatch`.
+    """
+    wanted = {n for n in names if n}
+    new_files: list[tuple[Path, float]] = []
+    for pattern in ("*.zip", "*.json"):
+        for f in backtest_dir.glob(pattern):
+            if f.name.startswith(".") or f.name in before:
+                continue
+            try:
+                mtime = f.stat().st_mtime
+            except OSError:
+                continue
+            if mtime < started_epoch - 2:
+                continue
+            new_files.append((f, mtime))
+
+    zips = sorted((c for c in new_files if c[0].suffix == ".zip"),
+                  key=lambda c: c[1], reverse=True)
+    jsons = sorted((c for c in new_files if c[0].suffix == ".json"),
+                   key=lambda c: c[1], reverse=True)
+
+    for path, _ in zips + jsons:
+        strategies = _artifact_strategies(path)
+        if strategies is None:
+            continue
+        if strategies & wanted:
+            return path, None
+
+    if new_files:
+        newest = (zips or jsons)[0][0]
+        found = sorted(_artifact_strategies(newest) or [])
+        return None, (
+            f"artifact mismatch: file hasil baru {newest.name} memuat strategi "
+            f"{found or 'tidak dikenal'}, bukan {sorted(wanted)}. Hasil tidak dipakai."
         )
-        for candidate in candidates:
-            try:
-                data = json.loads(candidate.read_text())
-                if "strategy" in data and strategy_name in data["strategy"]:
-                    return candidate
-            except Exception:
-                pass
-        return candidates[0] if candidates else None
+    return None, None
 
 
 def _pct(value) -> float | None:
@@ -639,27 +732,35 @@ async def get_backtest_results(job_id: str) -> dict:
         return {"error": f"Job {job_id} adalah job '{job.job_type}', bukan backtest. Gunakan tool_get_hyperopt_results untuk job hyperopt."}
 
     if job.status != JobStatus.COMPLETED:
-        return {"error": f"Job not completed yet, status: {job.status}"}
+        job_status = getattr(job.status, "value", str(job.status))
+        payload = {
+            "error": f"Job {job_id} tidak completed (status: {job_status})."
+                     + (f" Error: {job.error}" if job.error else ""),
+            "job_id": job_id,
+            "status": job_status,
+        }
+        return payload
 
     result_file_str = (job.result or {}).get("result_file")
     strategy_name   = (job.result or {}).get("strategy_name") or job.strategy_name
+    strategy_run    = (job.result or {}).get("strategy_run") or strategy_name
 
-    # Coba pakai path yang tersimpan di job
-    result_path = None
-    if result_file_str:
-        p = Path(result_file_str)
-        if p.exists():
-            result_path = p
-
-    # Fallback: cari file terbaru yang cocok dengan strategy
-    if not result_path:
-        result_path = (
-            _find_latest_result_file(strategy_name, suffix=".zip")
-            or _find_latest_result_file(strategy_name, suffix=".json")
-        )
-
-    if not result_path:
-        return {"error": "No backtest result file found", "job_id": job_id}
+    # F-6d: hanya artefak yang tercatat milik job ini. Tidak ada fallback ke file
+    # terbaru — fallback itulah yang dulu mengembalikan summary strategi lain.
+    if not result_file_str:
+        return {
+            "error": f"Job {job_id} tidak punya result_file (artefak hasil tidak pernah "
+                     f"tercatat sebagai milik job ini). Jalankan ulang backtest.",
+            "job_id": job_id,
+        }
+    result_path = Path(result_file_str)
+    if not result_path.exists():
+        return {
+            "error": f"File hasil {result_file_str} sudah tidak ada di disk. "
+                     f"Jalankan ulang backtest; server tidak mencari file lain.",
+            "job_id": job_id,
+            "raw_file": str(result_path),
+        }
 
     summary = _parse_result_file(result_path, strategy_name)
 
@@ -667,6 +768,16 @@ async def get_backtest_results(job_id: str) -> dict:
         return {
             "error": f"Hasil backtest tidak bisa diparsing dari {result_path.name}. "
                      f"File ada tapi format tidak dikenali atau strategy '{strategy_name}' tidak ada di hasil.",
+            "job_id": job_id,
+            "raw_file": str(result_path),
+        }
+
+    # F-6e: cross-check strategi artefak vs job.
+    if not (set(summary) & {strategy_name, strategy_run}):
+        return {
+            "error": f"artifact mismatch: {result_path.name} memuat strategi "
+                     f"{sorted(summary)}, sedangkan job {job_id} untuk '{strategy_name}'. "
+                     f"Hasil tidak dikembalikan.",
             "job_id": job_id,
             "raw_file": str(result_path),
         }
