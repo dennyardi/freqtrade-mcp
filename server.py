@@ -8,6 +8,7 @@ Dashboard: username+password login → returns session token (bukan MCP token la
 
 import hashlib
 import hmac
+from contextlib import asynccontextmanager
 import json
 import logging
 import os
@@ -593,8 +594,18 @@ async def api_login(request: Request):
 
 
 sse_app = mcp.sse_app(host="*")
+# Streamable HTTP (/mcp). Mount() tidak menjalankan lifespan sub-app, jadi
+# session manager streamable dijalankan dari lifespan _app di bawah.
+streamable_app = mcp.streamable_http_app(streamable_http_path="/mcp", host="*")
+
+
+@asynccontextmanager
+async def _lifespan(_: "Starlette"):
+    async with streamable_app.router.lifespan_context(streamable_app):
+        yield
 
 _app = Starlette(
+    lifespan=_lifespan,
     routes=[
         Route("/health",        health),
         Route("/",              dashboard),
@@ -605,6 +616,7 @@ _app = Starlette(
         Route("/connect",       dashboard),
         Route("/api/login",     api_login,  methods=["POST"]),
         Route("/api/tools",     api_tools,  methods=["POST"]),
+        Route("/mcp",           streamable_app),
         Mount("/",              app=sse_app),
     ],
 )

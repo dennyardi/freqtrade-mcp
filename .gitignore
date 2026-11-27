@@ -10,3 +10,4 @@ build/
 *.log
 user_data/
 *.fthypt
+data/
