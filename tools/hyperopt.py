@@ -57,6 +57,24 @@ async def _execute_hyperopt(job, epochs, spaces, timerange, pairs=None):
     job.status = JobStatus.RUNNING
     job.persist()
 
+    # B-07: --pairs di freqtrade hyperopt tidak override pair_whitelist di config,
+    # hanya filter. Satu-satunya cara override adalah pakai --config tambahan
+    # yang set exchange.pair_whitelist secara eksplisit.
+    extra_config_path = None
+    if pairs:
+        import tempfile, json as _json
+        extra_cfg = {
+            "exchange": {"pair_whitelist": pairs},
+            "pairlists": [{"method": "StaticPairList"}],
+        }
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".json", delete=False,
+            dir=Path(USER_DATA_DIR),
+            prefix=f"hyperopt_pairs_{job.job_id}_"
+        ) as f:
+            _json.dump(extra_cfg, f)
+            extra_config_path = f.name
+
     cmd = [
         FREQTRADE_BIN, "hyperopt",
         "--config", DEFAULT_EXCHANGE_CONFIG,
@@ -67,11 +85,11 @@ async def _execute_hyperopt(job, epochs, spaces, timerange, pairs=None):
         "--userdir", USER_DATA_DIR,
         "--print-json", "-j", "-1",
     ]
+    if extra_config_path:
+        # Tambahkan config override setelah config utama — freqtrade merge & override
+        cmd += ["--config", extra_config_path]
     if timerange:
         cmd += ["--timerange", timerange]
-    # B-07: teruskan pairs ke hyperopt
-    if pairs:
-        cmd += ["--pairs"] + pairs
 
     proc = await asyncio.create_subprocess_exec(
         *cmd,
@@ -102,6 +120,13 @@ async def _execute_hyperopt(job, epochs, spaces, timerange, pairs=None):
 
     await asyncio.gather(read_stdout(), read_stderr())
     await proc.wait()
+
+    # Hapus config temp pairs jika ada
+    if extra_config_path:
+        try:
+            Path(extra_config_path).unlink(missing_ok=True)
+        except Exception:
+            pass
 
     output = "".join(stdout_lines)
     err_output = "".join(stderr_lines)

@@ -364,8 +364,35 @@ class BearerAuthMiddleware:
                         "Tool denied: %s not allowed for token (path=%s)",
                         tool_name, path,
                     )
-                    # B-01: kembalikan 403 seketika, bukan hang
-                    await self._reject(send_with_headers, 403, f"Tool '{tool_name}' not allowed for this token")
+                    if path == "/api/tools":
+                        # REST endpoint: HTTP 403 biasa — tidak ada sesi SSE yang bisa putus
+                        await self._reject(send_with_headers, 403, f"Tool '{tool_name}' not allowed for this token")
+                    else:
+                        # MCP /messages/ via SSE: HTTP 403 memutus sesi.
+                        # Balas HTTP 200 + JSON-RPC error supaya sesi tetap hidup.
+                        # Agent menerima error terstruktur, bukan hang.
+                        msg_id = data.get("id")
+                        rpc_error = json.dumps({
+                            "jsonrpc": "2.0",
+                            "id": msg_id,
+                            "error": {
+                                "code": -32000,
+                                "message": f"Tool '{tool_name}' not allowed for this token",
+                            },
+                        }).encode()
+                        await send_with_headers({
+                            "type": "http.response.start",
+                            "status": 200,
+                            "headers": [
+                                (b"content-type", b"application/json"),
+                                (b"content-length", str(len(rpc_error)).encode()),
+                            ],
+                        })
+                        await send_with_headers({
+                            "type": "http.response.body",
+                            "body": rpc_error,
+                            "more_body": False,
+                        })
                     return
             except Exception:
                 pass  # Body bukan JSON valid — biarkan downstream handle
