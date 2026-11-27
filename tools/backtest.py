@@ -4,6 +4,7 @@ import asyncio
 import json
 import math
 import re
+import tempfile
 import time
 import uuid
 import zipfile
@@ -82,12 +83,160 @@ def parse_effective_fee(log: str) -> float | None:
         return None
 
 
+# ---------------------------------------------------------------------------
+# Trading mode & leverage (futures support).
+#
+# Config global (spot) TIDAK PERNAH diubah: mode futures memakai file config
+# sementara yang di-merge setelah config dasar (--config base --config temp).
+# Leverage di freqtrade hanya bisa diberikan oleh callback strategy
+# (IStrategy.leverage, proposed_leverage selalu 1.0), jadi untuk leverage > 1
+# server membuat wrapper strategy sementara berakhiran `_prog` dan menghapusnya
+# lagi setelah backtest selesai.
+# ---------------------------------------------------------------------------
+TRADING_MODES = ("spot", "futures")
+LEVERAGE_MIN = 1.0
+LEVERAGE_MAX = 10.0
+
+
+def validate_trading_mode(mode) -> str | None:
+    if not isinstance(mode, str):
+        return (
+            f"trading_mode harus string 'spot' atau 'futures', bukan {type(mode).__name__}."
+        )
+    if mode.strip().lower() not in TRADING_MODES:
+        return (
+            f"trading_mode '{mode}' tidak valid. Gunakan 'spot' (default) atau 'futures'."
+        )
+    return None
+
+
+def validate_leverage(leverage) -> str | None:
+    if isinstance(leverage, bool) or not isinstance(leverage, (int, float)):
+        return (
+            f"leverage harus angka antara {LEVERAGE_MIN:g} dan {LEVERAGE_MAX:g}, "
+            f"bukan {type(leverage).__name__}."
+        )
+    if not math.isfinite(leverage):
+        return f"leverage harus angka finite, bukan {leverage}."
+    if leverage < LEVERAGE_MIN or leverage > LEVERAGE_MAX:
+        return (
+            f"leverage={leverage:g} di luar rentang yang diizinkan "
+            f"({LEVERAGE_MIN:g}-{LEVERAGE_MAX:g}). Contoh valid: 1 (default), 3, 5."
+        )
+    return None
+
+
+def check_pairs_for_mode(pairs: list[str] | None, trading_mode: str) -> str | None:
+    """Pastikan format pair konsisten dengan trading mode (jangan fallback diam-diam)."""
+    for p in pairs or []:
+        has_settle = ":" in p
+        if trading_mode == "futures" and not has_settle:
+            return (
+                f"pair '{p}' bukan pair futures. Untuk trading_mode='futures' pakai format "
+                "BASE/QUOTE:SETTLE (contoh: \"BTC/USDT:USDT\")."
+            )
+        if trading_mode == "spot" and has_settle:
+            return (
+                f"pair '{p}' adalah pair futures (settle currency), tidak bisa dipakai di "
+                "trading_mode='spot'. Set trading_mode='futures', atau pakai pair spot "
+                "(contoh: \"BTC/USDT\")."
+            )
+    return None
+
+
+def _futures_config_path(job_id: str) -> Path:
+    return Path(tempfile.gettempdir()) / f"ft_futures_{job_id}.json"
+
+
+def _write_futures_config(job_id: str, pairs: list[str]) -> Path:
+    """Salin config dasar ke file sementara dengan trading_mode=futures."""
+    base = json.loads(Path(DEFAULT_EXCHANGE_CONFIG).read_text())
+    base.pop("api_server", None)
+    base["trading_mode"] = "futures"
+    base["margin_mode"] = "isolated"
+    base["stake_currency"] = "USDT"
+    exchange = dict(base.get("exchange") or {})
+    exchange["name"] = "binance"
+    exchange["pair_whitelist"] = list(pairs)
+    exchange["pair_blacklist"] = []
+    base["exchange"] = exchange
+    base["pairlists"] = [{"method": "StaticPairList"}]
+    path = _futures_config_path(job_id)
+    path.write_text(json.dumps(base, indent=2))
+    path.chmod(0o600)
+    return path
+
+
+def _leverage_tag(leverage: float) -> str:
+    return f"{float(leverage):g}".replace(".", "p")
+
+
+def _write_leverage_wrapper(strategy_name: str, leverage: float, job_id: str) -> tuple[str, Path]:
+    """Buat subclass strategy sementara yang memaksa leverage tertentu.
+
+    Nama file/class diakhiri `_prog` dan dihapus lagi setelah job selesai.
+    """
+    name = f"{strategy_name[:40]}_lev{_leverage_tag(leverage)}_{job_id[:6]}_prog"
+    code = f'''"""Wrapper leverage otomatis freqtrade-mcp (dibuat & dihapus per job).
+
+Membungkus {strategy_name} dan memaksa leverage {leverage:g}x (dibatasi max_leverage
+exchange). File ini bukan bagian riset; aman dihapus.
+"""
+import importlib
+
+from freqtrade.strategy import IStrategy
+
+_mod = importlib.import_module("{strategy_name}")
+_bases = [
+    obj for obj in vars(_mod).values()
+    if isinstance(obj, type) and issubclass(obj, IStrategy)
+    and obj is not IStrategy and obj.__module__ == _mod.__name__
+]
+if not _bases:
+    raise ImportError("Tidak ada subclass IStrategy di {strategy_name}")
+_Base = _bases[0]
+
+
+class {name}(_Base):
+    _ft_leverage = {float(leverage)!r}
+
+    def leverage(self, pair, current_time, current_rate, proposed_leverage,
+                 max_leverage, entry_tag, side, **kwargs) -> float:
+        return min(float(self._ft_leverage), float(max_leverage))
+'''
+    path = Path(STRATEGIES_DIR) / f"{name}.py"
+    path.write_text(code)
+    return name, path
+
+
+def _cleanup_paths(*paths: Path | None) -> None:
+    for p in paths:
+        if not p:
+            continue
+        try:
+            Path(p).unlink(missing_ok=True)
+        except Exception:
+            pass
+    # pyc hasil import wrapper
+    pycache = Path(STRATEGIES_DIR) / "__pycache__"
+    for p in paths:
+        if not p or Path(p).suffix != ".py":
+            continue
+        try:
+            for pyc in pycache.glob(f"{Path(p).stem}.*.pyc"):
+                pyc.unlink(missing_ok=True)
+        except Exception:
+            pass
+
+
 async def run_backtest(
     strategy_name: str,
     pairs: list[str] | None = None,
     timeframe: str = "1h",
     timerange: str | None = None,
     fee: float | None = FEE_DEFAULT,
+    trading_mode: str = "spot",
+    leverage: float = 1.0,
 ) -> dict:
     if not _validate_name(strategy_name):
         return {"error": f"Strategy name tidak valid: {strategy_name}"}
@@ -95,6 +244,13 @@ async def run_backtest(
         return {"error": f"Timeframe tidak valid: {timeframe}"}
     if (fee_err := validate_fee(fee)) is not None:
         return {"error": fee_err}
+    if (mode_err := validate_trading_mode(trading_mode)) is not None:
+        return {"error": mode_err}
+    if (lev_err := validate_leverage(leverage)) is not None:
+        return {"error": lev_err}
+
+    trading_mode = trading_mode.strip().lower()
+    leverage = float(leverage)
 
     # B-05: pairs kosong diam-diam pakai pairlist config → tolak eksplisit
     if pairs is not None and len(pairs) == 0:
@@ -103,6 +259,18 @@ async def run_backtest(
         return {"error": "Format pair tidak valid. Gunakan format BASE/QUOTE (contoh: BTC/USDT)"}
     if timerange and not _SAFE_TIMERANGE.match(timerange):
         return {"error": f"Timerange tidak valid: {timerange}. Format: YYYYMMDD atau YYYYMMDD-YYYYMMDD"}
+    if trading_mode == "futures" and not pairs:
+        return {
+            "error": "trading_mode='futures' membutuhkan argumen pairs berformat "
+                     "BASE/QUOTE:SETTLE (contoh: [\"BTC/USDT:USDT\"]). Pairlist config global adalah spot."
+        }
+    if (pair_mode_err := check_pairs_for_mode(pairs, trading_mode)) is not None:
+        return {"error": pair_mode_err}
+    if trading_mode == "spot" and leverage != 1.0:
+        return {
+            "error": f"leverage={leverage:g} hanya berlaku untuk trading_mode='futures'. "
+                     "Mode spot selalu leverage 1 — set trading_mode='futures' bila memang mau leverage."
+        }
 
     # B-04: validasi keberadaan file strategy sebelum queue
     strategy_file = Path(STRATEGIES_DIR) / f"{strategy_name}.py"
@@ -111,22 +279,60 @@ async def run_backtest(
 
     job_id = uuid.uuid4().hex[:12]
     job = Job(job_id=job_id, job_type="backtest", strategy_name=strategy_name,
-              fee=fee, fee_effective=None)
+              fee=fee, fee_effective=None,
+              trading_mode=trading_mode, leverage=leverage)
     _jobs[job_id] = job
     job.persist()
-    asyncio.create_task(_execute_backtest(job, pairs, timeframe, timerange, fee))
+    asyncio.create_task(_execute_backtest(job, pairs, timeframe, timerange, fee,
+                                          trading_mode=trading_mode, leverage=leverage))
     return {
         "job_id": job_id,
         "status": "pending",
-        "message": f"Backtest queued (fee={fee})",
+        "message": f"Backtest queued (fee={fee}, trading_mode={trading_mode}, leverage={leverage:g})",
         "fee": fee,
+        "trading_mode": trading_mode,
+        "leverage": leverage,
     }
 
 
-async def _execute_backtest(job, pairs, timeframe, timerange, fee=None):
+async def _execute_backtest(job, pairs, timeframe, timerange, fee=None,
+                            trading_mode: str = "spot", leverage: float = 1.0):
     job.status = JobStatus.RUNNING
     job.persist()
 
+    futures_cfg: Path | None = None
+    wrapper_path: Path | None = None
+    run_strategy = job.strategy_name
+
+    if trading_mode == "futures":
+        try:
+            futures_cfg = _write_futures_config(job.job_id, list(pairs or []))
+        except Exception as e:
+            job.status = JobStatus.FAILED
+            job.error = f"Gagal membuat config futures sementara: {e}"
+            job.persist()
+            return
+    if leverage > 1.0:
+        try:
+            run_strategy, wrapper_path = _write_leverage_wrapper(
+                job.strategy_name, leverage, job.job_id)
+        except Exception as e:
+            _cleanup_paths(futures_cfg)
+            job.status = JobStatus.FAILED
+            job.error = f"Gagal membuat wrapper leverage {leverage:g}x: {e}"
+            job.persist()
+            return
+
+    try:
+        await _run_backtest_inner(job, pairs, timeframe, timerange, fee,
+                                  futures_cfg, run_strategy)
+    finally:
+        # File sementara (config futures, wrapper leverage) tidak boleh tertinggal.
+        _cleanup_paths(futures_cfg, wrapper_path)
+
+
+async def _run_backtest_inner(job, pairs, timeframe, timerange, fee,
+                              futures_cfg: Path | None, run_strategy: str):
     backtest_dir = Path(USER_DATA_DIR) / "backtest_results"
     backtest_dir.mkdir(parents=True, exist_ok=True)
 
@@ -139,7 +345,7 @@ async def _execute_backtest(job, pairs, timeframe, timerange, fee=None):
     cmd = [
         FREQTRADE_BIN, "backtesting",
         "--config", DEFAULT_EXCHANGE_CONFIG,
-        "--strategy", job.strategy_name,
+        "--strategy", run_strategy,
         "--timeframe", timeframe,
         "--userdir", USER_DATA_DIR,
         "--export", "trades",
@@ -152,6 +358,10 @@ async def _execute_backtest(job, pairs, timeframe, timerange, fee=None):
     # Fee override per run — tidak menyentuh config global.
     if fee is not None:
         cmd += ["--fee", fee_to_arg(fee)]
+    if futures_cfg is not None:
+        # Config kedua di-merge freqtrade SETELAH config dasar → override
+        # trading_mode/margin_mode/pairlist tanpa menyentuh config global.
+        cmd += ["--config", str(futures_cfg)]
 
     proc = await asyncio.create_subprocess_exec(
         *cmd,
@@ -196,7 +406,8 @@ async def _execute_backtest(job, pairs, timeframe, timerange, fee=None):
     # F-2: Ambil file result dari daftar file yang ada SEBELUM backtest dijalankan,
     # dan bandingkan dengan yang ada SETELAH — file baru = milik job ini.
     # Fallback ke meta.json lookup jika timestamp approach tidak bisa.
-    result_path = _find_new_result_file(job.strategy_name, started_at=job_start_mtime)
+    result_path = _find_new_result_file(job.strategy_name, started_at=job_start_mtime,
+                                        aliases=[run_strategy])
 
     # F-5: completed tanpa artefak = sebenarnya failed
     if not result_path:
@@ -209,19 +420,35 @@ async def _execute_backtest(job, pairs, timeframe, timerange, fee=None):
         job.persist()
         return
 
+    # Metadata hasil (audit): mode/margin/leverage aktual + jumlah trade per sisi.
+    summary = _parse_result_file(result_path, job.strategy_name) or {}
+    stats = next(iter(summary.values()), {})
+    job.trades_long  = stats.get("trade_count_long")
+    job.trades_short = stats.get("trade_count_short")
+    job.trading_mode_effective = stats.get("trading_mode")
+    job.leverage_actual = stats.get("leverage_max")
+
     job.status   = JobStatus.COMPLETED
     job.progress = 100
     job.result   = {
         "result_file": str(result_path),
         "log": combined[-2000:],
         "strategy_name": job.strategy_name,
+        "strategy_run": run_strategy,
+        "trading_mode": job.trading_mode,
+        "trading_mode_effective": job.trading_mode_effective,
+        "leverage": job.leverage,
+        "leverage_actual": job.leverage_actual,
+        "trades_long": job.trades_long,
+        "trades_short": job.trades_short,
         "fee": job.fee_effective,
         "fee_requested": job.fee,
     }
     job.persist()
 
 
-def _find_new_result_file(strategy_name: str, started_at: float) -> Path | None:
+def _find_new_result_file(strategy_name: str, started_at: float,
+                          aliases: list[str] | None = None) -> Path | None:
     """
     F-2: Cari file hasil yang BARU muncul setelah backtest dimulai.
     Prioritas: .zip yang muncul setelah `started_at`, cocok strategy_name via meta.json.
@@ -240,13 +467,14 @@ def _find_new_result_file(strategy_name: str, started_at: float) -> Path | None:
     ]
     new_zips.sort(key=lambda f: f.stat().st_mtime, reverse=True)
 
-    # Prioritas: zip baru yang meta.json-nya memuat strategy_name
+    # Prioritas: zip baru yang meta.json-nya memuat strategy_name (atau alias wrapper leverage)
+    wanted = {strategy_name, *(aliases or [])}
     for candidate in new_zips:
         meta_path = candidate.with_suffix(".meta.json")
         if meta_path.exists():
             try:
                 meta = json.loads(meta_path.read_text())
-                if strategy_name in meta:
+                if wanted & set(meta):
                     return candidate
             except Exception:
                 pass
@@ -290,6 +518,16 @@ def _find_latest_result_file(strategy_name: str, suffix: str) -> Path | None:
             except Exception:
                 pass
         return candidates[0] if candidates else None
+
+
+def _pct(value) -> float | None:
+    """Fraksi (0.05 = 5%) → persen, 4 desimal. None bila tidak ada."""
+    if value is None:
+        return None
+    try:
+        return round(float(value) * 100, 4)
+    except Exception:
+        return None
 
 
 def _parse_result_file(result_path: Path, strategy_name: str) -> dict:
@@ -375,6 +613,17 @@ def _parse_result_file(result_path: Path, strategy_name: str) -> dict:
             "cagr":              m.get("cagr"),
             "expectancy":        m.get("expectancy"),
             "sqn":               m.get("sqn"),
+            # Futures / long-short breakdown (dari statistik freqtrade)
+            "trading_mode":      m.get("trading_mode"),
+            "margin_mode":       m.get("margin_mode"),
+            "trade_count_long":  m.get("trade_count_long"),
+            "trade_count_short": m.get("trade_count_short"),
+            "profit_total_long_pct":  _pct(m.get("profit_total_long")),
+            "profit_total_short_pct": _pct(m.get("profit_total_short")),
+            "leverage_max":      max(
+                (t.get("leverage") or 1.0 for t in (m.get("trades") or [])),
+                default=None,
+            ),
         }
 
     return summary
@@ -424,6 +673,18 @@ async def get_backtest_results(job_id: str) -> dict:
 
     return {
         "job_id": job_id,
+        "metadata": {
+            "strategy_name": job.strategy_name,
+            "strategy_run": (job.result or {}).get("strategy_run", job.strategy_name),
+            "trading_mode": job.trading_mode,
+            "trading_mode_effective": job.trading_mode_effective,
+            "leverage": job.leverage,
+            "leverage_actual": job.leverage_actual,
+            "trades_long": job.trades_long,
+            "trades_short": job.trades_short,
+            "fee": job.fee_effective if job.fee_effective is not None else job.fee,
+            "fee_requested": job.fee,
+        },
         "summary": summary,
         "fee": job.fee_effective if job.fee_effective is not None else job.fee,
         "fee_requested": job.fee,

@@ -40,6 +40,17 @@ def init_db() -> None:
         for col in ("fee", "fee_effective"):
             if col not in cols:
                 con.execute(f"ALTER TABLE jobs ADD COLUMN {col} REAL")
+        # Migrasi futures: mode/leverage/jumlah trade per sisi.
+        for col, typ in (
+            ("trading_mode", "TEXT"),
+            ("leverage", "REAL"),
+            ("trading_mode_effective", "TEXT"),
+            ("leverage_actual", "REAL"),
+            ("trades_long", "INTEGER"),
+            ("trades_short", "INTEGER"),
+        ):
+            if col not in cols:
+                con.execute(f"ALTER TABLE jobs ADD COLUMN {col} {typ}")
 
 
 async def save_job_async(job) -> None:
@@ -58,8 +69,10 @@ def _save_job_sync(job) -> None:
         con.execute("""
             INSERT INTO jobs
                 (job_id, job_type, strategy_name, status, progress,
-                 result, error, created_at, finished_at, fee, fee_effective)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 result, error, created_at, finished_at, fee, fee_effective,
+                 trading_mode, leverage, trading_mode_effective, leverage_actual,
+                 trades_long, trades_short)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(job_id) DO UPDATE SET
                 status        = excluded.status,
                 progress      = excluded.progress,
@@ -67,7 +80,13 @@ def _save_job_sync(job) -> None:
                 error         = excluded.error,
                 finished_at   = excluded.finished_at,
                 fee           = excluded.fee,
-                fee_effective = excluded.fee_effective
+                fee_effective = excluded.fee_effective,
+                trading_mode  = excluded.trading_mode,
+                leverage      = excluded.leverage,
+                trading_mode_effective = excluded.trading_mode_effective,
+                leverage_actual = excluded.leverage_actual,
+                trades_long   = excluded.trades_long,
+                trades_short  = excluded.trades_short
         """, (
             job.job_id,
             job.job_type,
@@ -80,6 +99,12 @@ def _save_job_sync(job) -> None:
             job.finished_at,
             job.fee,
             job.fee_effective,
+            getattr(job, "trading_mode", "spot"),
+            getattr(job, "leverage", 1.0),
+            getattr(job, "trading_mode_effective", None),
+            getattr(job, "leverage_actual", None),
+            getattr(job, "trades_long", None),
+            getattr(job, "trades_short", None),
         ))
 
 

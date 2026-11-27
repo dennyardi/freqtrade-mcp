@@ -28,6 +28,12 @@ class Job:
     error:         Optional[str] = None
     fee:           Optional[float] = None   # fee ratio yang diminta klien
     fee_effective: Optional[float] = None   # fee yang benar-benar dipakai freqtrade
+    trading_mode:  str = "spot"             # mode yang diminta klien
+    leverage:      float = 1.0              # leverage yang diminta klien
+    trading_mode_effective: Optional[str] = None   # dari hasil backtest (audit)
+    leverage_actual: Optional[float] = None        # leverage maksimum yang terpakai
+    trades_long:   Optional[int] = None
+    trades_short:  Optional[int] = None
     created_at:    str = field(default_factory=lambda: datetime.utcnow().isoformat())
     finished_at:   Optional[str] = None
     process:       Optional[asyncio.subprocess.Process] = None
@@ -43,6 +49,12 @@ class Job:
             "error":         self.error,
             "fee":           self.fee_effective if self.fee_effective is not None else self.fee,
             "fee_requested": self.fee,
+            "trading_mode":  self.trading_mode,
+            "trading_mode_effective": self.trading_mode_effective,
+            "leverage":      self.leverage,
+            "leverage_actual": self.leverage_actual,
+            "trades_long":   self.trades_long,
+            "trades_short":  self.trades_short,
             "created_at":    self.created_at,
             "finished_at":   self.finished_at,
         }
@@ -81,6 +93,12 @@ def bootstrap() -> None:
             error=         error,
             fee=           row.get("fee"),
             fee_effective= row.get("fee_effective"),
+            trading_mode=  row.get("trading_mode") or "spot",
+            leverage=      row.get("leverage") if row.get("leverage") is not None else 1.0,
+            trading_mode_effective= row.get("trading_mode_effective"),
+            leverage_actual= row.get("leverage_actual"),
+            trades_long=   row.get("trades_long"),
+            trades_short=  row.get("trades_short"),
             created_at=    row["created_at"],
             finished_at=   row["finished_at"],
         )

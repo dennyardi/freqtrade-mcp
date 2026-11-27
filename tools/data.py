@@ -16,7 +16,12 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from config import FREQTRADE_BIN, USER_DATA_DIR, DEFAULT_EXCHANGE_CONFIG
-from tools.backtest import _VALID_TIMEFRAMES, _validate_pairs
+from tools.backtest import (
+    _VALID_TIMEFRAMES,
+    _validate_pairs,
+    check_pairs_for_mode,
+    validate_trading_mode,
+)
 
 # Timerange opsional: YYYYMMDD-YYYYMMDD
 _SAFE_TIMERANGE = re.compile(r'^\d{8}-\d{8}$')
@@ -54,10 +59,20 @@ def _tf_seconds(timeframe: str) -> int:
         return 3600
 
 
-def _data_file(pair: str, timeframe: str) -> Path | None:
-    pair_safe = pair.replace("/", "_")
+def _data_dir(trading_mode: str = "spot") -> Path:
+    """Direktori data: spot → data/binance, futures → data/binance/futures."""
+    return DATA_DIR / "futures" if trading_mode == "futures" else DATA_DIR
+
+
+def _data_file(pair: str, timeframe: str, trading_mode: str = "spot") -> Path | None:
+    # freqtrade menamai file pair: BTC/USDT:USDT → BTC_USDT_USDT, dan untuk candle
+    # non-spot menambahkan suffix tipe candle + subdir futures/
+    # (mis. futures/BTC_USDT_USDT-1h-futures.feather).
+    pair_safe = pair.replace("/", "_").replace(":", "_")
+    base = _data_dir(trading_mode)
+    suffix = "-futures" if trading_mode == "futures" else ""
     for ext in _EXT_ORDER:
-        fpath = DATA_DIR / f"{pair_safe}-{timeframe}.{ext}"
+        fpath = base / f"{pair_safe}-{timeframe}{suffix}.{ext}"
         if fpath.exists() and fpath.stat().st_size > 0:
             return fpath
     return None
@@ -112,7 +127,7 @@ def _parse_timerange(tr: str) -> tuple[datetime, datetime]:
 
 
 async def _run_download(pairs: list[str], timeframe: str, timerange: str,
-                        flags: list[str]) -> tuple[int, str]:
+                        flags: list[str], trading_mode: str = "spot") -> tuple[int, str]:
     cmd = [
         FREQTRADE_BIN, "download-data",
         "--config", DEFAULT_EXCHANGE_CONFIG,
@@ -122,6 +137,9 @@ async def _run_download(pairs: list[str], timeframe: str, timerange: str,
         "--timerange", timerange,
         *flags,
     ]
+    if trading_mode == "futures":
+        # Data masuk ke user_data/data/binance/futures/ (OHLCV + mark + funding rate).
+        cmd += ["--trading-mode", "futures"]
     proc = await asyncio.create_subprocess_exec(
         *cmd,
         stdout=asyncio.subprocess.PIPE,
@@ -145,6 +163,7 @@ async def download_data(
     days: int | None = None,
     timerange: str | None = None,
     full: bool = False,
+    trading_mode: str = "spot",
 ) -> dict:
     """
     Unduh data historis OHLCV dari Binance.
@@ -156,11 +175,20 @@ async def download_data(
     `full=True` memakai `--erase` (unduh ulang seluruh rentang yang diminta).
     Tanpa `full`, bila rentang yang diminta lebih awal dari data lokal, server
     otomatis memakai `--prepend`.
+
+    `trading_mode='futures'` mengunduh data futures Binance (pair wajib
+    BASE/QUOTE:SETTLE, contoh BTC/USDT:USDT) termasuk mark price & funding rate
+    ke user_data/data/binance/futures/.
     """
     if not pairs:
         return {"error": "pairs tidak boleh kosong"}
+    if (mode_err := validate_trading_mode(trading_mode)) is not None:
+        return {"error": mode_err}
+    trading_mode = trading_mode.strip().lower()
     if _validate_pairs(pairs) is None:
         return {"error": "Format pair tidak valid. Gunakan format BASE/QUOTE (contoh: BTC/USDT)"}
+    if (pair_mode_err := check_pairs_for_mode(pairs, trading_mode)) is not None:
+        return {"error": pair_mode_err}
     if timeframe not in _VALID_TIMEFRAMES:
         return {"error": f"Timeframe tidak valid: {timeframe}"}
 
@@ -169,6 +197,7 @@ async def download_data(
         if not _SAFE_TIMERANGE.match(timerange):
             return {"error": "timerange harus format YYYYMMDD-YYYYMMDD (contoh: 20240101-20261127)"}
         start_dt, end_dt = _parse_timerange(timerange)
+        download_end_dt = end_dt
     else:
         if days is not None:
             if not isinstance(days, int) or days < 1 or days > MAX_DAYS:
@@ -178,7 +207,10 @@ async def download_data(
         # Konversi days → timerange eksplisit: lebih reliable daripada --days
         end_dt = datetime.now(timezone.utc)
         start_dt = end_dt - timedelta(days=days)
-        timerange = start_dt.strftime("%Y%m%d") + "-" + end_dt.strftime("%Y%m%d")
+        # Timerange freqtrade berbutir per hari (stop = 00:00 tanggal akhir), jadi
+        # akhir jendela harus H+1 supaya candle hari ini ikut terunduh.
+        download_end_dt = end_dt + timedelta(days=1)
+        timerange = start_dt.strftime("%Y%m%d") + "-" + download_end_dt.strftime("%Y%m%d")
 
     if end_dt <= start_dt:
         return {"error": "timerange tidak valid: tanggal akhir harus setelah tanggal mulai"}
@@ -189,7 +221,7 @@ async def download_data(
     before: dict[str, dict | None] = {}
     plans: dict[str, dict] = {}
     for pair in pairs:
-        fpath = _data_file(pair, timeframe)
+        fpath = _data_file(pair, timeframe, trading_mode)
         local = await _read_range(fpath)
         before[pair] = local
         need_prepend = bool(local and local["first_dt"] and start_dt < local["first_dt"])
@@ -221,7 +253,7 @@ async def download_data(
                     default=None,
                 )
                 if last_dt:
-                    append_tr = last_dt.strftime("%Y%m%d") + "-" + end_dt.strftime("%Y%m%d")
+                    append_tr = last_dt.strftime("%Y%m%d") + "-" + download_end_dt.strftime("%Y%m%d")
                     runs.append((append_tr, []))
         else:
             runs.append((timerange, []))
@@ -229,7 +261,7 @@ async def download_data(
     outputs: list[str] = []
     returncodes: list[int] = []
     for tr, flags in runs:
-        rc, out = await _run_download(pairs, timeframe, tr, flags)
+        rc, out = await _run_download(pairs, timeframe, tr, flags, trading_mode)
         returncodes.append(rc)
         outputs.append(out)
 
@@ -242,7 +274,7 @@ async def download_data(
             b = before[pair]
             if not b or not b["last_dt"]:
                 continue
-            a = await _read_range(_data_file(pair, timeframe))
+            a = await _read_range(_data_file(pair, timeframe, trading_mode))
             if a and a["last_dt"] and a["last_dt"] < b["last_dt"]:
                 regressed[pair] = a["last_dt"]
         if regressed:
@@ -252,7 +284,7 @@ async def download_data(
             fix_start = min(regressed.values())
             fix_end = fix_start.date() + timedelta(days=1)
             fix_tr = fix_start.strftime("%Y%m%d") + "-" + fix_end.strftime("%Y%m%d")
-            rc, out = await _run_download(list(regressed), timeframe, fix_tr, [])
+            rc, out = await _run_download(list(regressed), timeframe, fix_tr, [], trading_mode)
             returncodes.append(rc)
             outputs.append(out)
             runs.append((fix_tr, ["tail-restore"]))
@@ -278,7 +310,7 @@ async def download_data(
 
     for pair in pairs:
         plan = plans[pair]
-        fpath = _data_file(pair, timeframe)
+        fpath = _data_file(pair, timeframe, trading_mode)
         after = await _read_range(fpath)
         local = before[pair]
 
@@ -297,7 +329,11 @@ async def download_data(
         # Cakupan start yang diminta terpenuhi? (toleransi 1 candle + 1 hari untuk
         # batas ketersediaan data di exchange)
         covers_start = bool(after["first_dt"] and after["first_dt"] <= start_dt + timedelta(days=1))
-        covers_end = bool(after["last_dt"] and after["last_dt"] >= end_dt - tf_delta * 2)
+        # Akhir jendela: jangan menuntut candle masa depan. Candle terakhir yang
+        # sudah tutup bisa tertinggal 1-2 candle dari jam sekarang (lag exchange),
+        # jadi toleransi 3 candle.
+        end_eff = min(end_dt, datetime.now(timezone.utc))
+        covers_end = bool(after["last_dt"] and after["last_dt"] >= end_eff - tf_delta * 3)
 
         coverage[pair] = {
             "file": str(fpath) if fpath else None,
@@ -350,6 +386,7 @@ async def download_data(
             "failed_pairs": failed_pairs + noprogress,
             "timeframe": timeframe,
             "timerange": timerange,
+            "trading_mode": trading_mode,
             "coverage": coverage,
             "log_tail": "\n".join(output.splitlines()[-20:]),
         }
@@ -359,6 +396,8 @@ async def download_data(
         "pairs": success_pairs,
         "timeframe": timeframe,
         "timerange": timerange,
+        "trading_mode": trading_mode,
+        "data_dir": str(_data_dir(trading_mode)),
         "flag_used": "erase" if full else ("prepend" if any(p["need_prepend"] for p in plans.values()) else "append"),
         "coverage": coverage,
         "message": f"Data downloaded for {len(success_pairs)} pair(s)",

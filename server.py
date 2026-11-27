@@ -230,11 +230,17 @@ async def tool_download_data(
     days: int | None = None,
     timerange: str | None = None,
     full: bool = False,
+    trading_mode: str = "spot",
 ) -> str:
-    """Download historical OHLCV data from Binance. Use timerange (YYYYMMDD-YYYYMMDD) for precision or days (1-N) for relative lookback. When the requested start is earlier than local data, the server adds --prepend automatically. full=true re-downloads with --erase."""
+    """Download historical OHLCV data from Binance. Use timerange (YYYYMMDD-YYYYMMDD) for precision or days (1-N) for relative lookback. When the requested start is earlier than local data, the server adds --prepend automatically. full=true re-downloads with --erase.
+
+    trading_mode: "spot" (default) or "futures". Futures requires pairs in BASE/QUOTE:SETTLE form (e.g. BTC/USDT:USDT) and stores data under user_data/data/binance/futures/ (OHLCV + mark price + funding rate).
+    """
     if err := _check_tool_permission("tool_download_data"):
         return json.dumps({"error": err})
-    return json.dumps(await download_data(pairs=pairs, timeframe=timeframe, days=days, timerange=timerange, full=full), indent=2)
+    return json.dumps(await download_data(pairs=pairs, timeframe=timeframe, days=days,
+                                          timerange=timerange, full=full,
+                                          trading_mode=trading_mode), indent=2)
 
 @mcp.tool()
 async def tool_run_backtest(
@@ -243,17 +249,28 @@ async def tool_run_backtest(
     timeframe: str = "1h",
     timerange: str | None = None,
     fee: float = 0.001,
+    trading_mode: str = "spot",
+    leverage: float = 1.0,
 ) -> str:
     """Run a Freqtrade backtest for a strategy. Returns job_id (async).
 
     fee: biaya per sisi sebagai rasio, 0-0.01, default 0.001 (0.1%). Override ini
     hanya berlaku untuk run tersebut (flag --fee freqtrade), config global tidak diubah.
+
+    trading_mode: "spot" (default) atau "futures". Mode futures memakai config
+    sementara (trading_mode=futures, margin_mode=isolated) — config global tidak diubah —
+    dan pair wajib berformat BASE/QUOTE:SETTLE (contoh BTC/USDT:USDT).
+
+    leverage: 1-10, default 1. Hanya untuk trading_mode="futures"; strategi dengan
+    can_short=True bisa membuka short. Leverage diimplementasikan lewat wrapper
+    strategy sementara yang dihapus setelah job selesai.
     """
     if err := _check_tool_permission("tool_run_backtest"):
         return json.dumps({"error": err})
     return json.dumps(await run_backtest(
         strategy_name=strategy_name, pairs=pairs,
         timeframe=timeframe, timerange=timerange, fee=fee,
+        trading_mode=trading_mode, leverage=leverage,
     ), indent=2)
 
 @mcp.tool()
@@ -540,9 +557,9 @@ _TOOL_MAP = {
     "tool_get_hyperopt_results":    (get_hyperopt_results,     ["job_id"]),
     "tool_get_performance_summary": (get_performance_summary,  ["job_id"]),
     "tool_compare_strategies":      (compare_strategies,       ["job_ids"]),
-    "tool_run_backtest":            (run_backtest,             ["strategy_name", "pairs", "timeframe", "timerange", "fee"]),
+    "tool_run_backtest":            (run_backtest,             ["strategy_name", "pairs", "timeframe", "timerange", "fee", "trading_mode", "leverage"]),
     "tool_run_hyperopt":            (run_hyperopt,             ["strategy_name", "epochs", "spaces", "timerange", "pairs", "fee"]),
-    "tool_download_data":           (download_data,            ["pairs", "timeframe", "days", "timerange", "full"]),
+    "tool_download_data":           (download_data,            ["pairs", "timeframe", "days", "timerange", "full", "trading_mode"]),
     "tool_create_strategy":         (create_strategy,          ["name", "description", "timeframe"]),
     "tool_validate_strategy":       (validate_strategy,        ["strategy_name"]),
     "tool_write_strategy":          (write_strategy,           ["name", "code"]),
