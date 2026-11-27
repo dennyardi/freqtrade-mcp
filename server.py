@@ -14,6 +14,7 @@ import os
 import time
 import uuid
 from collections import defaultdict
+from contextvars import ContextVar
 from pathlib import Path
 from starlette.requests import Request
 from starlette.responses import JSONResponse, HTMLResponse
@@ -42,6 +43,10 @@ DASHBOARD_PASSWORD = os.getenv("DASHBOARD_PASSWORD", "")
 
 if not DASHBOARD_USERNAME or not DASHBOARD_PASSWORD:
     raise RuntimeError("DASHBOARD_USERNAME dan DASHBOARD_PASSWORD harus di-set di .env")
+
+# ContextVar: menyimpan set tool yang diizinkan untuk request SSE yang sedang berjalan
+# Diset oleh middleware, dibaca oleh tool handler
+_current_allowed_tools: ContextVar[set | None] = ContextVar("_current_allowed_tools", default=None)
 
 # Build token permission map & load jobs dari SQLite
 try:
@@ -174,19 +179,40 @@ MAX_BODY_SIZE = 1 * 1024 * 1024  # 1 MB
 # ---------------------------------------------------------------------------
 mcp = MCPServer("freqtrade-mcp", version="1.0.0")
 
+
+def _check_tool_permission(tool_name: str) -> str | None:
+    """
+    Cek apakah tool_name diizinkan untuk token yang sedang aktif.
+    Return None jika diizinkan, atau pesan error jika ditolak.
+    Hanya berlaku saat dipanggil via SSE (ContextVar di-set oleh middleware).
+    """
+    allowed = _current_allowed_tools.get()
+    if allowed is None:
+        # Tidak ada context (misal: internal call) — izinkan
+        return None
+    if tool_name not in allowed:
+        return f"Tool '{tool_name}' not allowed for this token"
+    return None
+
 @mcp.tool()
 async def tool_create_strategy(name: str, description: str, timeframe: str = "1h") -> str:
     """Generate a Freqtrade strategy Python file from a natural-language description."""
+    if err := _check_tool_permission("tool_create_strategy"):
+        return json.dumps({"error": err})
     return json.dumps(await create_strategy(name=name, description=description, timeframe=timeframe), indent=2)
 
 @mcp.tool()
 async def tool_validate_strategy(strategy_name: str) -> str:
     """Validate a strategy file for syntax and Freqtrade compatibility."""
+    if err := _check_tool_permission("tool_validate_strategy"):
+        return json.dumps({"error": err})
     return json.dumps(await validate_strategy(strategy_name=strategy_name), indent=2)
 
 @mcp.tool()
 async def tool_download_data(pairs: list[str], timeframe: str = "1h", days: int = 180) -> str:
     """Download historical OHLCV data from Binance for given pairs and timeframe."""
+    if err := _check_tool_permission("tool_download_data"):
+        return json.dumps({"error": err})
     return json.dumps(await download_data(pairs=pairs, timeframe=timeframe, days=days), indent=2)
 
 @mcp.tool()
@@ -197,6 +223,8 @@ async def tool_run_backtest(
     timerange: str | None = None,
 ) -> str:
     """Run a Freqtrade backtest for a strategy. Returns job_id (async)."""
+    if err := _check_tool_permission("tool_run_backtest"):
+        return json.dumps({"error": err})
     return json.dumps(await run_backtest(
         strategy_name=strategy_name, pairs=pairs,
         timeframe=timeframe, timerange=timerange,
@@ -208,46 +236,63 @@ async def tool_run_hyperopt(
     epochs: int = 100,
     spaces: list[str] | None = None,
     timerange: str | None = None,
+    pairs: list[str] | None = None,
 ) -> str:
     """Run Freqtrade hyperopt to optimise strategy parameters. Returns job_id (async)."""
+    if err := _check_tool_permission("tool_run_hyperopt"):
+        return json.dumps({"error": err})
     return json.dumps(await run_hyperopt(
         strategy_name=strategy_name, epochs=epochs,
-        spaces=spaces, timerange=timerange,
+        spaces=spaces, timerange=timerange, pairs=pairs,
     ), indent=2)
 
 @mcp.tool()
 async def tool_get_job_status(job_id: str) -> str:
     """Poll status and progress of an async backtest or hyperopt job."""
+    if err := _check_tool_permission("tool_get_job_status"):
+        return json.dumps({"error": err})
     return json.dumps(await get_job_status(job_id=job_id), indent=2)
 
 @mcp.tool()
 async def tool_cancel_job(job_id: str) -> str:
     """Cancel a running backtest or hyperopt job."""
+    if err := _check_tool_permission("tool_cancel_job"):
+        return json.dumps({"error": err})
     return json.dumps(await cancel_job(job_id=job_id), indent=2)
 
 @mcp.tool()
 async def tool_list_strategies() -> str:
     """List all available strategy files on the server."""
+    if err := _check_tool_permission("tool_list_strategies"):
+        return json.dumps({"error": err})
     return json.dumps(await list_strategies(), indent=2)
 
 @mcp.tool()
 async def tool_get_backtest_results(job_id: str) -> str:
     """Retrieve and parse results of a completed backtest job."""
+    if err := _check_tool_permission("tool_get_backtest_results"):
+        return json.dumps({"error": err})
     return json.dumps(await get_backtest_results(job_id=job_id), indent=2)
 
 @mcp.tool()
 async def tool_get_hyperopt_results(job_id: str) -> str:
     """Retrieve best parameters found by a completed hyperopt job."""
+    if err := _check_tool_permission("tool_get_hyperopt_results"):
+        return json.dumps({"error": err})
     return json.dumps(await get_hyperopt_results(job_id=job_id), indent=2)
 
 @mcp.tool()
 async def tool_get_performance_summary(job_id: str) -> str:
     """Get performance summary: Sharpe, drawdown, win rate, verdict, recommendations."""
+    if err := _check_tool_permission("tool_get_performance_summary"):
+        return json.dumps({"error": err})
     return json.dumps(await get_performance_summary(job_id=job_id), indent=2)
 
 @mcp.tool()
 async def tool_compare_strategies(job_ids: list[str]) -> str:
     """Compare performance metrics of multiple completed backtest jobs side by side."""
+    if err := _check_tool_permission("tool_compare_strategies"):
+        return json.dumps({"error": err})
     return json.dumps(await compare_strategies(job_ids=job_ids), indent=2)
 
 # ---------------------------------------------------------------------------
@@ -329,7 +374,13 @@ class BearerAuthMiddleware:
 
         # SSE: hanya cek token, jangan consume body (stream)
         if path == "/sse":
-            await self.app(scope, receive, send_with_headers)
+            # Set ContextVar supaya tool handlers tahu token mana yang aktif di sesi ini
+            allowed_set = TOKEN_PERMISSIONS.get(mcp_token, set())
+            ctx_token = _current_allowed_tools.set(allowed_set)
+            try:
+                await self.app(scope, receive, send_with_headers)
+            finally:
+                _current_allowed_tools.reset(ctx_token)
             return
 
         # Endpoints yang perlu tool-level enforcement
@@ -353,49 +404,22 @@ class BearerAuthMiddleware:
                 more_body = msg.get("more_body", False)
             body = b"".join(body_chunks)
 
-            # Periksa tool name dari body
-            try:
-                data = json.loads(body)
-                # Format REST /api/tools: {"tool": "...", "args": {...}}
-                # Format MCP /messages/: {"method": "tools/call", "params": {"name": "..."}}
-                tool_name = data.get("tool") or data.get("params", {}).get("name", "")
-                if tool_name and tool_name not in allowed:
-                    logger.warning(
-                        "Tool denied: %s not allowed for token (path=%s)",
-                        tool_name, path,
-                    )
-                    if path == "/api/tools":
-                        # REST endpoint: HTTP 403 biasa — tidak ada sesi SSE yang bisa putus
+            if path == "/api/tools":
+                # REST endpoint: enforce di HTTP level (403 aman, tidak ada SSE)
+                try:
+                    data = json.loads(body)
+                    tool_name = data.get("tool") or ""
+                    if tool_name and tool_name not in (TOKEN_PERMISSIONS.get(mcp_token) or set()):
+                        logger.warning("Tool denied: %s not allowed for token (REST)", tool_name)
                         await self._reject(send_with_headers, 403, f"Tool '{tool_name}' not allowed for this token")
-                    else:
-                        # MCP /messages/ via SSE: HTTP 403 memutus sesi.
-                        # Balas HTTP 200 + JSON-RPC error supaya sesi tetap hidup.
-                        # Agent menerima error terstruktur, bukan hang.
-                        msg_id = data.get("id")
-                        rpc_error = json.dumps({
-                            "jsonrpc": "2.0",
-                            "id": msg_id,
-                            "error": {
-                                "code": -32000,
-                                "message": f"Tool '{tool_name}' not allowed for this token",
-                            },
-                        }).encode()
-                        await send_with_headers({
-                            "type": "http.response.start",
-                            "status": 200,
-                            "headers": [
-                                (b"content-type", b"application/json"),
-                                (b"content-length", str(len(rpc_error)).encode()),
-                            ],
-                        })
-                        await send_with_headers({
-                            "type": "http.response.body",
-                            "body": rpc_error,
-                            "more_body": False,
-                        })
-                    return
-            except Exception:
-                pass  # Body bukan JSON valid — biarkan downstream handle
+                        return
+                except Exception:
+                    pass
+            else:
+                # /messages/ via SSE: JANGAN tolak di HTTP level — itu memutus sesi SSE.
+                # Set ContextVar; tool handler yang return error ke stream SSE.
+                allowed_set = TOKEN_PERMISSIONS.get(mcp_token, set())
+                _current_allowed_tools.set(allowed_set)
 
             # Stateful replay_receive: panggil pertama → body, berikutnya → disconnect
             replay_sent = False
