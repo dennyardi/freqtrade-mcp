@@ -3,6 +3,7 @@
 import asyncio
 import json
 import re
+import time
 import uuid
 import zipfile
 import io
@@ -66,6 +67,15 @@ async def _execute_backtest(job, pairs, timeframe, timerange):
     job.status = JobStatus.RUNNING
     job.persist()
 
+    backtest_dir = Path(USER_DATA_DIR) / "backtest_results"
+    backtest_dir.mkdir(parents=True, exist_ok=True)
+
+    # F-2: snapshot mtime semua file yang ada sebelum proses mulai
+    before_files: set[Path] = set(backtest_dir.glob("*.zip")) | set(
+        f for f in backtest_dir.glob("*.json") if not f.name.startswith(".")
+    )
+    job_start_mtime = time.monotonic()
+
     cmd = [
         FREQTRADE_BIN, "backtesting",
         "--config", DEFAULT_EXCHANGE_CONFIG,
@@ -118,20 +128,69 @@ async def _execute_backtest(job, pairs, timeframe, timerange):
         job.persist()
         return
 
-    # Cari file hasil terbaru yang di-generate freqtrade
-    # Format baru (2024+): .zip — Format lama: .json
-    result_zip  = _find_latest_result_file(job.strategy_name, suffix=".zip")
-    result_json = _find_latest_result_file(job.strategy_name, suffix=".json")
-    result_path = result_zip or result_json
+    # F-2: Ambil file result dari daftar file yang ada SEBELUM backtest dijalankan,
+    # dan bandingkan dengan yang ada SETELAH — file baru = milik job ini.
+    # Fallback ke meta.json lookup jika timestamp approach tidak bisa.
+    result_path = _find_new_result_file(job.strategy_name, started_at=job_start_mtime)
+
+    # F-5: completed tanpa artefak = sebenarnya failed
+    if not result_path:
+        job.status = JobStatus.FAILED
+        job.error  = (
+            "Backtest selesai (exit 0) tapi tidak ada file hasil yang bisa ditemukan. "
+            "Kemungkinan tidak ada candle untuk timerange/pair yang diminta.\n"
+            + combined[-3000:]
+        )
+        job.persist()
+        return
 
     job.status   = JobStatus.COMPLETED
     job.progress = 100
     job.result   = {
-        "result_file": str(result_path) if result_path else None,
+        "result_file": str(result_path),
         "log": combined[-2000:],
         "strategy_name": job.strategy_name,
     }
     job.persist()
+
+
+def _find_new_result_file(strategy_name: str, started_at: float) -> Path | None:
+    """
+    F-2: Cari file hasil yang BARU muncul setelah backtest dimulai.
+    Prioritas: .zip yang muncul setelah `started_at`, cocok strategy_name via meta.json.
+    Fallback: .zip terbaru setelah started_at tanpa cek strategy (1 job aktif sekaligus).
+    Fallback terakhir: meta.json lookup (backward compat).
+    """
+    backtest_dir = Path(USER_DATA_DIR) / "backtest_results"
+    now = time.time()
+    # started_at adalah monotonic, ubah ke epoch approx (hanya untuk estimasi window)
+    # Gunakan wall-clock cutoff: file yang mtime-nya setelah proses kira-kira mulai
+    cutoff_epoch = now - (time.monotonic() - started_at) - 5  # +5 detik toleransi
+
+    new_zips = [
+        f for f in backtest_dir.glob("*.zip")
+        if f.stat().st_mtime >= cutoff_epoch
+    ]
+    new_zips.sort(key=lambda f: f.stat().st_mtime, reverse=True)
+
+    # Prioritas: zip baru yang meta.json-nya memuat strategy_name
+    for candidate in new_zips:
+        meta_path = candidate.with_suffix(".meta.json")
+        if meta_path.exists():
+            try:
+                meta = json.loads(meta_path.read_text())
+                if strategy_name in meta:
+                    return candidate
+            except Exception:
+                pass
+
+    # Fallback: zip baru paling muda (1 job aktif per waktu)
+    if new_zips:
+        return new_zips[0]
+
+    # Fallback terakhir: cari semua zip dengan meta.json
+    return _find_latest_result_file(strategy_name, suffix=".zip") or \
+           _find_latest_result_file(strategy_name, suffix=".json")
 
 
 def _find_latest_result_file(strategy_name: str, suffix: str) -> Path | None:

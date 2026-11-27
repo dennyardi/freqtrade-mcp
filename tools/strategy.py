@@ -199,6 +199,88 @@ async def create_strategy(
     }
 
 
+async def write_strategy(name: str, code: str) -> dict:
+    """
+    F-3: Tulis (atau timpa) file strategy dengan kode yang diberikan.
+    Wajib lulus py_compile sebelum disimpan. Gunakan untuk menerapkan hasil hyperopt
+    atau memodifikasi parameter strategy secara manual.
+    """
+    if not _validate_name(name):
+        return {"error": f"Strategy name '{name}' tidak valid. Gunakan huruf, angka, underscore (mulai huruf)."}
+    if not code or len(code.strip()) < 50:
+        return {"error": "code terlalu pendek atau kosong. Sertakan implementasi IStrategy lengkap."}
+
+    # Verifikasi kode mengandung class yang inherit IStrategy
+    if "IStrategy" not in code:
+        return {"error": "code harus mengandung class yang mewarisi IStrategy dari freqtrade."}
+
+    file_path = Path(STRATEGIES_DIR) / f"{name}.py"
+
+    # Tulis ke file temp dulu, baru validate
+    import tempfile, os
+    tmp_fd, tmp_path = tempfile.mkstemp(suffix=".py", dir=STRATEGIES_DIR)
+    try:
+        os.write(tmp_fd, code.encode())
+        os.close(tmp_fd)
+
+        python_bin = Path(FREQTRADE_BIN).parent / "python3"
+        syntax_proc = await asyncio.create_subprocess_exec(
+            str(python_bin), "-m", "py_compile", tmp_path,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        _, syn_err = await syntax_proc.communicate()
+
+        if syntax_proc.returncode != 0:
+            return {
+                "success": False,
+                "error": f"Syntax error: {syn_err.decode()[:500]}",
+            }
+
+        # Pindahkan ke lokasi final (atomic replace)
+        import shutil
+        shutil.move(tmp_path, str(file_path))
+    except Exception as e:
+        try:
+            os.unlink(tmp_path)
+        except Exception:
+            pass
+        return {"success": False, "error": str(e)}
+
+    return {
+        "success": True,
+        "strategy_name": name,
+        "file_path": str(file_path),
+        "message": f"Strategy '{name}' ditulis. Jalankan tool_validate_strategy untuk konfirmasi.",
+    }
+
+
+async def delete_strategy(strategy_name: str) -> dict:
+    """
+    F-3/F-5: Hapus file strategy dari disk.
+    BaselineEma tidak bisa dihapus (dilindungi).
+    """
+    if not _validate_name(strategy_name):
+        return {"error": f"Strategy name '{strategy_name}' tidak valid."}
+    if strategy_name == "BaselineEma":
+        return {"error": "BaselineEma adalah baseline strategy dan tidak bisa dihapus."}
+
+    file_path = Path(STRATEGIES_DIR) / f"{strategy_name}.py"
+    if not file_path.exists():
+        return {"error": f"Strategy '{strategy_name}' tidak ditemukan."}
+
+    try:
+        file_path.unlink()
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+    return {
+        "success": True,
+        "strategy_name": strategy_name,
+        "message": f"Strategy '{strategy_name}' berhasil dihapus.",
+    }
+
+
 async def validate_strategy(strategy_name: str) -> dict:
     """
     Validasi strategy dengan 'freqtrade list-strategies'.

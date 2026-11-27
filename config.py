@@ -30,6 +30,8 @@ MCP_BEARER_TOKEN_EVAL = os.environ.get("MCP_BEARER_TOKEN_EVAL", "changeme-eval-t
 WRITE_TOOLS = {
     "tool_create_strategy",
     "tool_validate_strategy",
+    "tool_write_strategy",
+    "tool_delete_strategy",
     "tool_download_data",
     "tool_run_backtest",
     "tool_run_hyperopt",

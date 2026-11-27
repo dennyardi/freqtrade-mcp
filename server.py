@@ -32,7 +32,7 @@ from tools.data import download_data
 from tools.evaluation import get_performance_summary, compare_strategies, list_strategies
 from tools.hyperopt import run_hyperopt, get_hyperopt_results
 from tools.jobs import get_job_status, cancel_job
-from tools.strategy import create_strategy, validate_strategy
+from tools.strategy import create_strategy, validate_strategy, write_strategy, delete_strategy
 
 logger = logging.getLogger("freqtrade-mcp")
 
@@ -209,11 +209,30 @@ async def tool_validate_strategy(strategy_name: str) -> str:
     return json.dumps(await validate_strategy(strategy_name=strategy_name), indent=2)
 
 @mcp.tool()
-async def tool_download_data(pairs: list[str], timeframe: str = "1h", days: int = 180) -> str:
-    """Download historical OHLCV data from Binance for given pairs and timeframe."""
+async def tool_write_strategy(name: str, code: str) -> str:
+    """Write or overwrite a strategy file with provided Python code. Code must implement IStrategy and pass syntax check."""
+    if err := _check_tool_permission("tool_write_strategy"):
+        return json.dumps({"error": err})
+    return json.dumps(await write_strategy(name=name, code=code), indent=2)
+
+@mcp.tool()
+async def tool_delete_strategy(strategy_name: str) -> str:
+    """Delete a strategy file from disk. BaselineEma is protected and cannot be deleted."""
+    if err := _check_tool_permission("tool_delete_strategy"):
+        return json.dumps({"error": err})
+    return json.dumps(await delete_strategy(strategy_name=strategy_name), indent=2)
+
+@mcp.tool()
+async def tool_download_data(
+    pairs: list[str],
+    timeframe: str = "1h",
+    days: int | None = None,
+    timerange: str | None = None,
+) -> str:
+    """Download historical OHLCV data from Binance. Use timerange (YYYYMMDD-YYYYMMDD) for precision or days (1-3650) for relative lookback."""
     if err := _check_tool_permission("tool_download_data"):
         return json.dumps({"error": err})
-    return json.dumps(await download_data(pairs=pairs, timeframe=timeframe, days=days), indent=2)
+    return json.dumps(await download_data(pairs=pairs, timeframe=timeframe, days=days, timerange=timerange), indent=2)
 
 @mcp.tool()
 async def tool_run_backtest(
@@ -503,9 +522,11 @@ _TOOL_MAP = {
     "tool_compare_strategies":      (compare_strategies,       ["job_ids"]),
     "tool_run_backtest":            (run_backtest,             ["strategy_name", "pairs", "timeframe", "timerange"]),
     "tool_run_hyperopt":            (run_hyperopt,             ["strategy_name", "epochs", "spaces", "timerange", "pairs"]),
-    "tool_download_data":           (download_data,            ["pairs", "timeframe", "days"]),
+    "tool_download_data":           (download_data,            ["pairs", "timeframe", "days", "timerange"]),
     "tool_create_strategy":         (create_strategy,          ["name", "description", "timeframe"]),
     "tool_validate_strategy":       (validate_strategy,        ["strategy_name"]),
+    "tool_write_strategy":          (write_strategy,           ["name", "code"]),
+    "tool_delete_strategy":         (delete_strategy,          ["strategy_name"]),
 }
 
 

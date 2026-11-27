@@ -84,11 +84,21 @@ def bootstrap() -> None:
             save_job(job)
 
 
+def _trim_error(text: str, max_lines: int = 20) -> str:
+    """Kembalikan N baris terakhir dari teks error (tidak terpotong di tengah kata)."""
+    lines = text.splitlines()
+    return "\n".join(lines[-max_lines:])
+
+
 async def get_job_status(job_id: str) -> dict:
     job = _jobs.get(job_id)
     if not job:
         return {"error": f"Job {job_id} not found"}
-    return job.to_dict()
+    d = job.to_dict()
+    # F-5: kembalikan error sebagai 20 baris terakhir utuh (tidak terpotong di tengah kata)
+    if d.get("error"):
+        d["error"] = _trim_error(d["error"], max_lines=20)
+    return d
 
 
 async def cancel_job(job_id: str) -> dict:
