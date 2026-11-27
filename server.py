@@ -32,7 +32,7 @@ from tools.backtest import run_backtest, get_backtest_results
 from tools.data import download_data
 from tools.evaluation import get_performance_summary, compare_strategies, list_strategies
 from tools.hyperopt import run_hyperopt, get_hyperopt_results
-from tools.jobs import get_job_status, cancel_job
+from tools.jobs import get_job_status, cancel_job, list_jobs
 from tools.strategy import create_strategy, validate_strategy, write_strategy, delete_strategy
 
 logger = logging.getLogger("freqtrade-mcp")
@@ -266,6 +266,13 @@ async def tool_run_hyperopt(
         strategy_name=strategy_name, epochs=epochs,
         spaces=spaces, timerange=timerange, pairs=pairs,
     ), indent=2)
+
+@mcp.tool()
+async def tool_list_jobs(limit: int = 200) -> str:
+    """List all known jobs (backtest & hyperopt) from this server session, newest first."""
+    if err := _check_tool_permission("tool_list_jobs"):
+        return json.dumps({"error": err})
+    return json.dumps(await list_jobs(limit=limit), indent=2)
 
 @mcp.tool()
 async def tool_get_job_status(job_id: str) -> str:
@@ -516,6 +523,7 @@ async def dashboard(request: Request):
 # Mapping tool_name → fungsi async beserta allowed arguments (whitelist)
 _TOOL_MAP = {
     "tool_list_strategies":         (list_strategies,          []),
+    "tool_list_jobs":               (list_jobs,                ["limit"]),
     "tool_get_job_status":          (get_job_status,           ["job_id"]),
     "tool_cancel_job":              (cancel_job,               ["job_id"]),
     "tool_get_backtest_results":    (get_backtest_results,     ["job_id"]),

@@ -90,6 +90,21 @@ def _trim_error(text: str, max_lines: int = 20) -> str:
     return "\n".join(lines[-max_lines:])
 
 
+async def list_jobs(limit: int = 200) -> dict:
+    """Return semua jobs yang diketahui server (dari memory/SQLite), terbaru dulu."""
+    all_jobs = sorted(
+        _jobs.values(),
+        key=lambda j: j.created_at,
+        reverse=True,
+    )
+    if limit:
+        all_jobs = all_jobs[:limit]
+    return {
+        "jobs": [j.to_dict() for j in all_jobs],
+        "total": len(_jobs),
+    }
+
+
 async def get_job_status(job_id: str) -> dict:
     job = _jobs.get(job_id)
     if not job:

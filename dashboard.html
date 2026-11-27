@@ -1583,7 +1583,7 @@ function showApp() {
   if (location.pathname !== correctPath) {
     history.replaceState({ page }, '', correctPath);
   }
-  startRefresh();
+  loadJobsFromServer().then(() => startRefresh());
 }
 
 /* Auto-restore session */
@@ -1808,6 +1808,32 @@ function setStatus(online) {
   const lbl = document.getElementById('sidebar-status');
   dot.className = 'status-dot ' + (online ? 'online' : 'offline');
   lbl.textContent = online ? 'Online' : 'Offline';
+}
+
+/* ── Load jobs historis dari server saat login ──────────────────────── */
+async function loadJobsFromServer() {
+  try {
+    const data = await api('tool_list_jobs', { limit: 500 });
+    const jobs = data.jobs || [];
+    // Isi jobsMap dari server — tidak timpa job yang sudah ada (dari trackJob)
+    for (const j of jobs) {
+      if (!jobsMap[j.job_id]) {
+        jobsMap[j.job_id] = j;
+      }
+    }
+    renderAllJobs();
+    // Auto-fetch results untuk semua job completed yang belum ada di resultsList
+    const knownResultIds = new Set(resultsList.map(r => r.job_id));
+    const completedJobs = jobs.filter(j => j.job_type === 'backtest' && j.status === 'completed' && !knownResultIds.has(j.job_id));
+    // Fetch hasil secara paralel, max 10 sekaligus untuk tidak flood server
+    for (let i = 0; i < completedJobs.length; i += 10) {
+      const batch = completedJobs.slice(i, i + 10);
+      await Promise.allSettled(batch.map(j => fetchResult(j.job_id, j.strategy_name)));
+    }
+  } catch (e) {
+    // Gagal load historis — tidak fatal, lanjut dengan jobsMap kosong
+    console.warn('loadJobsFromServer failed:', e);
+  }
 }
 
 /* ── Refresh ────────────────────────────────────────────────────────── */

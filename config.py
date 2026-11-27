@@ -35,6 +35,7 @@ WRITE_TOOLS = {
     "tool_download_data",
     "tool_run_backtest",
     "tool_run_hyperopt",
+    "tool_list_jobs",
     "tool_get_job_status",
     "tool_cancel_job",
     "tool_list_strategies",
@@ -45,6 +46,7 @@ WRITE_TOOLS = {
 }
 
 EVAL_TOOLS = {
+    "tool_list_jobs",
     "tool_list_strategies",
     "tool_get_backtest_results",
     "tool_get_hyperopt_results",
