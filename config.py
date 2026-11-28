@@ -34,6 +34,7 @@ WRITE_TOOLS = {
     "tool_delete_strategy",
     "tool_download_data",
     "tool_get_funding_history",
+    "tool_backtest_carry",
     "tool_run_backtest",
     "tool_run_hyperopt",
     "tool_list_jobs",
@@ -48,6 +49,7 @@ WRITE_TOOLS = {
 
 EVAL_TOOLS = {
     "tool_get_funding_history",
+    "tool_backtest_carry",
     "tool_list_jobs",
     "tool_list_strategies",
     "tool_get_backtest_results",

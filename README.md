@@ -25,7 +25,7 @@ Freqtrade MCP Server (VPS Neva — trade.dennyardi.com)
 Freqtrade CLI (backtesting, hyperopt, download-data)
 ```
 
-## 16 MCP Tools
+## 17 MCP Tools
 
 ### Agent Pembuat Strategi
 | Tool | Deskripsi |
@@ -47,6 +47,22 @@ Freqtrade CLI (backtesting, hyperopt, download-data)
 | `tool_get_performance_summary` | Analisis + verdict (PASS/OPTIMIZE/REJECT) + rekomendasi |
 | `tool_compare_strategies` | Bandingkan performa beberapa strategi side-by-side |
 | `tool_get_funding_history` | Riwayat funding rate satu pair futures (`pair`, `timerange`, `limit`) — dasar riset carry |
+| `tool_backtest_carry` | Simulasi carry delta-netral: long spot + short perp dengan notional sama; funding dihitung dari file `funding_rate`, basis P&L dari selisih harga spot vs perp, fee dua leg, rebalance opsional (`none`/`daily`/`weekly`). Baca-only, tidak mengubah data/strategi |
+
+### Carry backtest (delta-netral)
+
+`tool_backtest_carry` menjalankan `tools/carry_sim.py` dengan interpreter freqtrade
+(butuh pyarrow; venv MCP tidak punya), membaca candle spot + candle perp + funding:
+
+- `funding_basis="fixed"` (default): funding = `stake x rate` → setara kolom tabel
+  funding tahunan dan dipakai sebagai yield carry; `"notional"`: notional short
+  aktual x rate (cara freqtrade membebankan funding, ikut membesar saat harga naik).
+- `net_pct` = funding + basis P&L - fee dua leg + biaya rebalance; `net_pct_notional`
+  = versi `funding_basis="notional"` selalu ikut dilaporkan.
+- `liquidation_risk.max_adverse_move_pct` = kenaikan harga perp yang menghabiskan
+  margin short (`1/leverage - maintenance_margin`); `max_observed_adverse_move_pct`
+  = kenaikan terburuk yang benar-benar terjadi relatif terhadap harga short saat itu.
+- `data_gaps` memisahkan gap spot, perp, dan funding (gap funding = jarak > 9 jam).
 
 ### Funding rate (futures)
 

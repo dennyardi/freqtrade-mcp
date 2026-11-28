@@ -32,6 +32,7 @@ from tools.jobs import bootstrap
 from tools.backtest import run_backtest, get_backtest_results
 from tools.data import download_data
 from tools.funding import get_funding_history
+from tools.carry import backtest_carry
 from tools.evaluation import get_performance_summary, compare_strategies, list_strategies
 from tools.hyperopt import run_hyperopt, get_hyperopt_results
 from tools.jobs import get_job_status, cancel_job, list_jobs
@@ -301,6 +302,49 @@ async def tool_get_funding_history(
     if timerange is not None and not re.match(r'^\d{8}(-\d{8})?$', timerange):
         return json.dumps({"error": "timerange harus format YYYYMMDD atau YYYYMMDD-YYYYMMDD"})
     return json.dumps(await get_funding_history(pair=pair, timerange=timerange, limit=limit), indent=2)
+
+@mcp.tool()
+async def tool_backtest_carry(
+    pair: str = "BTC/USDT",
+    perp_pair: str = "BTC/USDT:USDT",
+    timerange: str = "20240101-20241130",
+    stake: float = 1000.0,
+    fee_spot: float = 0.001,
+    fee_perp: float = 0.0005,
+    rebalance: str = "none",
+    leverage: float = 3.0,
+    funding_basis: str = "fixed",
+    maintenance_margin: float = 0.005,
+) -> str:
+    """Simulasi carry delta-netral: long spot + short perp, notional sama, panen funding.
+
+    Freqtrade tidak bisa memegang dua leg dalam satu strategi, jadi tool ini
+    mensimulasikan keduanya dari candle spot + candle perp + file funding_rate
+    yang sudah ada (tanpa unduh data baru, tanpa mengubah config/strategi).
+
+    pair: pair spot (contoh "BTC/USDT"). perp_pair: pair futures "BASE/QUOTE:SETTLE"
+    (contoh "BTC/USDT:USDT"). timerange: "YYYYMMDD-YYYYMMDD" (batas akhir = 00:00
+    UTC tanggal itu). stake: notional awal per leg (USDT, default 1000).
+    fee_spot/fee_perp: fee per sisi (rasio, default 0.001 / 0.0005).
+    rebalance: "none" | "daily" | "weekly" (menyamakan notional kedua leg).
+    leverage: leverage short perp untuk analisis likuidasi (default 3).
+    funding_basis: "fixed" (funding = stake x rate; setara tabel funding tahunan)
+    atau "notional" (notional short aktual x rate, seperti freqtrade).
+    maintenance_margin: maintenance margin exchange (default 0.005).
+
+    Output JSON: funding_collected_pct, basis_pnl_pct, fees_pct, net_pct,
+    net_annualized_pct, max_drawdown_pct, negative_funding_days,
+    worst_funding_day_pct, rincian per tahun, data_gaps, liquidation_risk
+    (termasuk max_adverse_move_pct), dan komponen USDT.
+    """
+    if err := _check_tool_permission("tool_backtest_carry"):
+        return json.dumps({"error": err})
+    return json.dumps(await backtest_carry(
+        pair=pair, perp_pair=perp_pair, timerange=timerange, stake=stake,
+        fee_spot=fee_spot, fee_perp=fee_perp, rebalance=rebalance,
+        leverage=leverage, funding_basis=funding_basis,
+        maintenance_margin=maintenance_margin,
+    ), indent=2)
 
 @mcp.tool()
 async def tool_run_hyperopt(
@@ -590,6 +634,7 @@ _TOOL_MAP = {
     "tool_run_hyperopt":            (run_hyperopt,             ["strategy_name", "epochs", "spaces", "timerange", "pairs", "fee"]),
     "tool_download_data":           (download_data,            ["pairs", "timeframe", "days", "timerange", "full", "trading_mode"]),
     "tool_get_funding_history":     (get_funding_history,      ["pair", "timerange", "limit"]),
+    "tool_backtest_carry":          (backtest_carry,           ["pair", "perp_pair", "timerange", "stake", "fee_spot", "fee_perp", "rebalance", "leverage", "funding_basis", "maintenance_margin", "timeframe"]),
     "tool_create_strategy":         (create_strategy,          ["name", "description", "timeframe"]),
     "tool_validate_strategy":       (validate_strategy,        ["strategy_name"]),
     "tool_write_strategy":          (write_strategy,           ["name", "code"]),
