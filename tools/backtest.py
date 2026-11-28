@@ -364,6 +364,11 @@ async def _run_backtest_inner(job, pairs, timeframe, timerange, fee,
         "--userdir", USER_DATA_DIR,
         "--export", "trades",
         "--breakdown", "month",
+        # Selalu hitung ulang. Tanpa ini freqtrade memakai hasil cache yang umurnya
+        # masih < 1 hari untuk strategi+config+timerange yang sama, keluar lebih awal
+        # tanpa menulis artefak baru, sehingga deteksi artefak per-job menandai job
+        # "failed" padahal datanya valid (mis. SweepEma2050_1h 20241201-20251130).
+        "--cache", "none",
     ]
     if pairs:
         cmd += ["--pairs"] + pairs
