@@ -437,12 +437,43 @@ SECURITY_HEADERS = [
     (b"permissions-policy", b"camera=(), microphone=(), geolocation=()"),
 ]
 
+# Path streamable HTTP (MCP spec 2025-03-26). Route("/mcp") hanya exact match,
+# tapi tetap dicek dengan/tanpa trailing slash supaya tidak ada jalur lolos.
+MCP_PATH = "/mcp"
+
+
+def _is_mcp_path(path: str) -> bool:
+    return path.rstrip("/") == MCP_PATH
+
+
+def _mcp_denied_tool(body: bytes, allowed: set) -> tuple[object, str] | None:
+    """
+    Cek payload JSON-RPC /mcp: balikan (id, tool) untuk tools/call pertama yang
+    tidak diizinkan token ini, atau None kalau semuanya boleh / bukan tools/call.
+
+    Tidak melempar exception: body yang tidak valid dibiarkan diproses downstream
+    (yang akan membalas parse error JSON-RPC sendiri).
+    """
+    try:
+        payload = json.loads(body or b"{}")
+    except Exception:
+        return None
+    messages = payload if isinstance(payload, list) else [payload]
+    for msg in messages:
+        if not isinstance(msg, dict) or msg.get("method") != "tools/call":
+            continue
+        params = msg.get("params")
+        tool = params.get("name") if isinstance(params, dict) else None
+        if isinstance(tool, str) and tool and tool not in allowed:
+            return msg.get("id"), tool
+    return None
+
 
 class BearerAuthMiddleware:
     """
     Pure ASGI middleware:
     - Bearer token enforcement untuk semua path non-public
-    - Tool-level permission enforcement di /api/tools dan /messages/
+    - Tool-level permission enforcement di /api/tools, /messages/ dan /mcp
     - Stateful replay_receive untuk SSE-compatible downstream
     - Security headers di setiap response
     """
@@ -511,6 +542,14 @@ class BearerAuthMiddleware:
                 _current_allowed_tools.reset(ctx_token)
             return
 
+        # Streamable HTTP (/mcp): sebelumnya hanya "token dikenal" yang dicek, jadi
+        # token read-only (ft-eval) bisa memanggil tool write. Sekarang enforcement
+        # sama seperti /messages: ContextVar untuk tool handler + tolak di HTTP level
+        # dengan error JSON-RPC terstruktur.
+        if _is_mcp_path(path):
+            await self._handle_mcp(scope, receive, send_with_headers, allowed)
+            return
+
         # Endpoints yang perlu tool-level enforcement
         needs_enforcement = (
             path == "/api/tools" or path.startswith("/messages")
@@ -563,6 +602,73 @@ class BearerAuthMiddleware:
             return
 
         await self.app(scope, receive, send_with_headers)
+
+    async def _handle_mcp(self, scope, receive, send, allowed):
+        """
+        Enforcement izin tool per-token untuk /mcp (streamable HTTP).
+
+        - GET (stream notifikasi/downstream): cukup set ContextVar, body tidak disentuh.
+        - POST: body dibaca sekali lalu di-replay ke downstream. tools/call yang tidak
+          diizinkan dijawab error JSON-RPC -32001 (status 200) tanpa memutus sesi —
+          sama seperti perilaku penolakan di /sse.
+        """
+        allowed_set = set(allowed or ())
+        ctx_token = _current_allowed_tools.set(allowed_set)
+        try:
+            if scope.get("method", "GET") != "POST":
+                await self.app(scope, receive, send)
+                return
+
+            body_chunks = []
+            total_size = 0
+            more_body = True
+            while more_body:
+                msg = await receive()
+                if msg["type"] == "http.disconnect":
+                    return
+                chunk = msg.get("body", b"")
+                total_size += len(chunk)
+                if total_size > MAX_BODY_SIZE:
+                    await self._reject(send, 413, "Payload too large")
+                    return
+                body_chunks.append(chunk)
+                more_body = msg.get("more_body", False)
+            body = b"".join(body_chunks)
+
+            denied = _mcp_denied_tool(body, allowed_set)
+            if denied is not None:
+                msg_id, tool_name = denied
+                logger.warning("Tool denied: %s not allowed for token (/mcp)", tool_name)
+                await self._rpc_error(send, msg_id, f"Tool '{tool_name}' not allowed for this token")
+                return
+
+            replay_sent = False
+
+            async def replay_receive():
+                nonlocal replay_sent
+                if not replay_sent:
+                    replay_sent = True
+                    return {"type": "http.request", "body": body, "more_body": False}
+                # Setelah body, teruskan ke receive asli: SDK streamable memakai
+                # receive() untuk mendeteksi disconnect, jadi jangan dipalsukan —
+                # kalau langsung http.disconnect, stream response mati sebelum
+                # mengirim hasil (gejala: http 200 + body kosong).
+                return await receive()
+
+            await self.app(scope, replay_receive, send)
+        finally:
+            _current_allowed_tools.reset(ctx_token)
+
+    @staticmethod
+    async def _rpc_error(send, msg_id, message: str):
+        body = json.dumps({"jsonrpc": "2.0", "id": msg_id,
+                           "error": {"code": -32001, "message": message}}).encode()
+        await send({"type": "http.response.start", "status": 200,
+                    "headers": [
+                        (b"content-type", b"application/json"),
+                        (b"content-length", str(len(body)).encode()),
+                    ]})
+        await send({"type": "http.response.body", "body": body, "more_body": False})
 
     @staticmethod
     async def _reject(send, status: int, detail: str):
